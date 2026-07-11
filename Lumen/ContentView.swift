@@ -9,21 +9,44 @@ import SwiftUI
 }
 
 struct ContentView: View {
-    @State private var isPlaying = false
+    @State private var engine = AmbientEngine()
+    @State private var greetingState: FocusedState = .hidden
+    @State private var navigationState: FocusedState = .subduedAlt
+    @State private var ambientState: FocusedState = .subdued
 
     var body: some View {
         ZStack {
-            CoreNavigation()
-                .ignoresSafeArea()
+            FocusContainer(state: navigationState) {
+                CoreNavigation()
+            }
+            .ignoresSafeArea()
 
-            AmbientPlayer(isPlaying: $isPlaying)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 35)
+            FocusContainer(state: greetingState) {
+                GreetingView()
+            }
 
-            Image(systemName: "playpause.fill")
-                .font(.system(size: 72, weight: .bold))
-                .foregroundStyle(isPlaying ? .red : .white)
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isPlaying)
+            FocusContainer(state: ambientState, alignment: .bottom) {
+                AmbientPlayer(engine: engine)
+            }
+            .padding(.bottom, 35)
+        }
+        .onAppear {
+            startSequence()
+        }
+    }
+
+    private func startSequence() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                greetingState = .visible
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                greetingState = .hidden
+                navigationState = .visible
+                ambientState = .visible
+            }
         }
     }
 }
