@@ -16,10 +16,12 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            Color.black
+                .ignoresSafeArea()
+
             FocusContainer(state: navigationState) {
                 CoreNavigation()
             }
-            .ignoresSafeArea()
 
             FocusContainer(state: greetingState) {
                 GreetingView()
@@ -30,6 +32,12 @@ struct ContentView: View {
             }
             .padding(.bottom, 35)
         }
+        .ignoresSafeArea()
+        .environment(\.onDotMatrixPress) { pressing in
+            withAnimation(.easeInOut(duration: 1)) {
+                ambientState = pressing ? .subdued : .visible
+            }
+        }
         .onAppear {
             startSequence()
         }
@@ -37,12 +45,12 @@ struct ContentView: View {
 
     private func startSequence() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeInOut(duration: 0.5)) {
+            withAnimation(.easeInOut(duration: 1)) {
                 greetingState = .visible
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
-            withAnimation(.easeInOut(duration: 0.5)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.1) {
+            withAnimation(.easeInOut(duration: 1)) {
                 greetingState = .hidden
                 navigationState = .visible
                 ambientState = .visible

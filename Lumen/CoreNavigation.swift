@@ -46,6 +46,7 @@ struct CoreNavigation: View {
                     .scaleEffect(focusScale(for: page))
                     .compositingGroup()
                     .blur(radius: focusBlur(for: page))
+                    .opacity(focusOpacity(for: page))
                     .offset(Self.baseOffset(for: page))
             }
         }
@@ -83,11 +84,15 @@ struct CoreNavigation: View {
     }
 
     private func focusScale(for page: Page) -> CGFloat {
-        1.0 - (UIConstants.Navigation.unfocusScale / 100) * unfocusProgress(for: page)
+        1.0 - (UIConstants.Focus.subduedScale / 100) * unfocusProgress(for: page)
     }
 
     private func focusBlur(for page: Page) -> CGFloat {
-        UIConstants.Navigation.unfocusBlur * unfocusProgress(for: page)
+        UIConstants.Focus.subduedBlur * unfocusProgress(for: page)
+    }
+
+    private func focusOpacity(for page: Page) -> Double {
+        1.0 - (1.0 - Double(UIConstants.Focus.subduedOpacity) / 100) * Double(unfocusProgress(for: page))
     }
 
     private var dragGesture: some Gesture {
