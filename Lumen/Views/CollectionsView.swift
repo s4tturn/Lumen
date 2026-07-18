@@ -1,13 +1,27 @@
 import SwiftUI
 
+// MARK: - Environment Key
+
+struct ExpandCollectionKey: EnvironmentKey {
+    static let defaultValue: (Collection) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var expandCollection: (Collection) -> Void {
+        get { self[ExpandCollectionKey.self] }
+        set { self[ExpandCollectionKey.self] = newValue }
+    }
+}
+
 // MARK: - Model
 
-private struct CollectionTask {
+struct CollectionTask: Identifiable {
+    let id = UUID()
     let emoji: String
     let name: String
 }
 
-private struct Collection: Identifiable {
+struct Collection: Identifiable {
     let id = UUID()
     let name: String
     let color: Color
@@ -219,6 +233,7 @@ private struct TurntableTicksView: View {
 
 @MainActor
 struct CollectionsView: View {
+    @Environment(\.expandCollection) private var expandCollection
     @State private var rotation: Double = 0
     @State private var dragOffset: Double = 0
     @State private var velocity: Double = 0
@@ -301,6 +316,10 @@ struct CollectionsView: View {
                     cardFlickGesture(),
                     including: isCenter ? .all : .none
                 )
+                .onTapGesture {
+                    guard isCenter else { return }
+                    expandCollection(collection(for: i))
+                }
             }
         }
     }
