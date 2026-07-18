@@ -22,17 +22,16 @@ struct AmbientPlayer: View {
         .animation(spring, value: engine.isPlaying)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.9), trigger: mode)
         .onAppear {
-            let first = AmbientSource.all[0]
-            selectedSourceID = first.id
-            engine.load(first)
+            selectedSourceID = AmbientSource.all[0].id
         }
         .onChange(of: volume) { _, newVolume in
             engine.volume = newVolume
         }
         .onChange(of: selectedSourceID) { _, id in
             guard let source = AmbientSource.all.first(where: { $0.id == id }) else { return }
+            let wasPlaying = engine.isPlaying
             engine.load(source)
-            engine.play()
+            if wasPlaying { engine.play() }
         }
         .onChange(of: engine.isPlaying) { _, playing in
             withAnimation(spring) { mode = playing ? .compact : .mini }
@@ -112,7 +111,7 @@ struct AmbientPlayer: View {
             hoveredSourceID = nil
         }
         if mode == .expanded || mode == .volume {
-            withAnimation(spring) { mode = .compact }
+            withAnimation(spring) { mode = engine.isPlaying ? .compact : .mini }
         }
     }
 }
