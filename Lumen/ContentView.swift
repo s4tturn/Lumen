@@ -33,7 +33,7 @@ struct ContentView: View {
         }
         .ignoresSafeArea()
         .environment(\.onDotMatrixPress) { pressing in
-            withAnimation(.easeInOut(duration: 1)) {
+            withAnimation(.smooth(duration: 0.6)) {
                 ambientState = pressing ? .subdued : .visible
             }
         }
@@ -44,12 +44,12 @@ struct ContentView: View {
 
     private func startSequence() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeInOut(duration: 1)) {
+            withAnimation(.smooth(duration: 0.8)) {
                 greetingState = .visible
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.1) {
-            withAnimation(.easeInOut(duration: 1)) {
+            withAnimation(.smooth(duration: 0.8)) {
                 greetingState = .hidden
                 navigationState = .visible
                 ambientState = .visible

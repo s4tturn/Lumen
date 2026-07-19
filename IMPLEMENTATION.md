@@ -21,7 +21,7 @@ Edit this file using simple, concise, clear language. Avoid unnecessary statemen
 - `unfocusProgress(for:)` computes a 0–1 value from the distance between current offset and the target page's offset. Scale, blur, and opacity are interpolated from this single progress value. This is faster and smoother than using `FocusedState` which would require state changes.
 - Snap detection uses a 25% threshold of page step width/height. If the drag exceeds this threshold in the right direction, it snaps to that page. Otherwise it falls back to velocity-based prediction (0.12× velocity factor) and picks the nearest adjacent page.
 - `adjacentPages(from:)` restricts side pages (left, right, bottom) to only navigate back to center. Center can reach all pages.
-- `.interactiveSpring(response: 0.4, dampingFraction: 0.8)` gives a responsive but not bouncy snap.
+- Snap animation: `.spring(duration: 0.45, bounce: 0.05)` — smooth settle with subtle bounce, matching `duration + bounce` API (iOS 17+).
 - `.drawingGroup()` offloads the layered ZStack rendering to Metal, preventing frame drops during drag.
 - `pageSpacing` (25pt) creates a visible gap between pages during transition.
 
@@ -45,7 +45,7 @@ Edit this file using simple, concise, clear language. Avoid unnecessary statemen
 
 ## AmbientPlayer
 
-- Four `PlayerMode` states control the player's shape and content. Mode transitions use a custom spring (0.28 response, 0.92 damping) for quick, fluid morphing.
+- Four `PlayerMode` states control the player's shape and content. Mode transitions use `.spring(duration: 0.28, bounce: 0.04, blendDuration: 0.2)` for quick, fluid morphing. `blendDuration: 0.2` ensures smooth velocity handoff during rapid mode changes.
 - `.mini` (45×45 bubble): only play/pause icon, no drag gesture. Tap toggles playback. Starting mode on launch.
 - `.compact` (pill): play/pause + "Ambient" label. Entry point for drag gestures. Only entered once user plays. Fills available width (nil width).
 - `.volume` (70% width slider): `GeometryReader`-based slider with capsule fill. Entry from compact via horizontal swipe (>15pt distance, >1.5:1 horizontal ratio). Volume is mapped from `location.x` relative to slider width, accounting for 15pt leading padding.
@@ -115,18 +115,19 @@ Edit this file using simple, concise, clear language. Avoid unnecessary statemen
 
 ### Named Springs
 
-- `snapSpring`: `Animation.spring(duration: 0.4, bounce: 0.05)` — snappy with subtle bounce for turntable snap-to.
-- `transitionSpring`: `Animation.interactiveSpring(response: 0.4, dampingFraction: 0.8)` — responsive for expand/collapse via tap.
+- `snapSpring`: `Animation.spring(duration: 0.45, bounce: 0.05)` — smooth with subtle bounce for turntable snap-to.
+- `transitionSpring`: `Animation.spring(duration: 0.4, bounce: 0.05)` — smooth with subtle bounce for expand/collapse via tap.
 - `dismissSpring`: `Animation.spring(duration: 0.35, bounce: 0.15)` — bouncy dismiss respecting gesture momentum.
 - `cancelSpring`: `Animation.spring(duration: 0.3, bounce: 0)` — no-bounce cancel when drag doesn't meet threshold.
 
 ## Startup Sequence
 
 - `ContentView.startSequence()` uses `DispatchQueue.main.asyncAfter` for timing:
-  - 0.1s: greeting fades in (1s easeInOut)
-  - 3.1s: greeting fades out, navigation and ambient fade in (1s easeInOut)
+  - 0.1s: greeting fades in (0.8s smooth)
+  - 3.1s: greeting fades out, navigation and ambient fade in (0.8s smooth)
+- All startup transitions use `.smooth(duration: 0.8)` — Apple's recommended non-spring default for content fades.
 - `greetingState` starts as `.hidden`, `navigationState` as `.subduedAlt`, `ambientState` as `.subdued`.
-- Ambient player dims to `.subdued` during dot matrix long press, returns to `.visible` on release.
+- Ambient player dims to `.subdued` during dot matrix long press with `.smooth(duration: 0.6)`, returns to `.visible` on release.
 
 ## Glass Effect Ordering
 

@@ -57,7 +57,7 @@ Lumen is built around Apple's latest design language and should always feel like
 ### `UIConstants.swift`
 **Implementation:**
 - Enum-based namespace with nested enums: `Navigation`, `DotMatrix`, `Focus`, `General`.
-- `Navigation`: `pageSpacing` (25), `unfocusScale` (15), `unfocusBlur` (8).
+- `Navigation`: `pageSpacing` (25).
 - `DotMatrix`: `dotSize` (10), `rippleScale` (6).
 - `Focus`: blur/opacity/scale values for each `FocusedState`. `subduedAltScale` is 0 (no scale reduction).
 - `General`: `screenWidth`, `screenHeight` from `UIScreen`, `screenCornerRadius` from private `_displayCornerRadius` API (falls back to 55pt).

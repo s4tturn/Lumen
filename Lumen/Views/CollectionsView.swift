@@ -128,7 +128,7 @@ struct CollectionsView: View {
     private static let snapSpring = Animation.spring(duration: 0.4, bounce: 0.05)
 
     /// Responsive spring for expand / collapse via tap.
-    private static let transitionSpring = Animation.interactiveSpring(response: 0.4, dampingFraction: 0.8)
+    private static let transitionSpring = Animation.spring(duration: 0.4, bounce: 0.05)
 
     /// Bouncy dismiss – respects gesture momentum (WWDC 2023 "Animate with springs").
     private static let dismissSpring = Animation.spring(duration: 0.35, bounce: 0.15)

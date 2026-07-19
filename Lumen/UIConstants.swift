@@ -5,8 +5,6 @@ import SwiftUI
 enum UIConstants {
     enum Navigation {
         static let pageSpacing: CGFloat = 25
-        static let unfocusScale: CGFloat = 15
-        static let unfocusBlur: CGFloat = 8
     }
 
     enum DotMatrix {
