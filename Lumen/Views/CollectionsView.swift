@@ -112,6 +112,7 @@ struct CollectionsView: View {
     @State private var lastTimestamp = Date()
     @State private var lastHapticRidge = 0
     @State private var expandedIndex: Int? = nil
+    @State private var animatingInIndex: Int? = nil
     @State private var animatingOutIndex: Int? = nil
     @State private var dismissOffset: CGSize = .zero
 
@@ -171,8 +172,25 @@ struct CollectionsView: View {
                     )
                 }
 
+                // Ghost card behind turntable — only during animation so it mirrors
+                // the card's expand/dismiss motion, then vanishes at rest.
+                if let gi = expandedIndex ?? animatingInIndex ?? animatingOutIndex {
+                    makeCardView(
+                        index: gi,
+                        fractional: fractional,
+                        cardSize: cardSize,
+                        spacing: spacing,
+                        cardsOffsetY: cardsOffsetY
+                    )
+                    .allowsHitTesting(false)
+                    .transition(.identity)
+                    .offset(y: cardsOffsetY)
+                    .zIndex(0.5)
+                }
+
                 turntableLayer(radius: w, totalAngle: total, center: center)
                     .allowsHitTesting(expandedIndex == nil)
+                    .blur(radius: expandedIndex != nil ? 10 : 0)
                     .zIndex(1)
             }
             .clipped()
@@ -227,11 +245,12 @@ struct CollectionsView: View {
             cardsOffsetY: cardsOffsetY
         )
         .equatable()
+        .blur(radius: expandedIndex != nil && !expanded ? 10 : 0)
         .allowsHitTesting(expanded || isFocused)
         .highPriorityGesture(cardFlickGesture(), including: (!expanded && isFocused) ? .all : .none)
         .simultaneousGesture(tapGesture(index: index, expanded: expanded, distance: d))
         .simultaneousGesture(dismissDragGesture(), including: expanded ? .all : .none)
-        .zIndex(index == expandedIndex ? 2 : (index == animatingOutIndex ? 1 : 0))
+        .zIndex(index == expandedIndex || index == animatingOutIndex ? 2 : 0)
         .offset(y: cardsOffsetY)
     }
 
@@ -250,8 +269,15 @@ struct CollectionsView: View {
                         animatingOutIndex = nil
                     }
                 } else if distance < 0.5 {
-                    withAnimation(Self.transitionSpring) {
-                        expandedIndex = index
+                    // Show ghost at carousel position one frame before expand animation.
+                    animatingInIndex = index
+                    DispatchQueue.main.async {
+                        withAnimation(Self.transitionSpring) {
+                            expandedIndex = index
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        animatingInIndex = nil
                     }
                 }
             }

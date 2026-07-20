@@ -10,6 +10,11 @@ enum UIConstants {
     enum DotMatrix {
         static let dotSize: CGFloat = 10
         static let rippleScale: CGFloat = 6
+        static let dotSpacing: CGFloat = 44
+        static let waveSpread: Double = 0.55
+        static let rotationSpeed: Double = 0.03
+        static let baseOpacity: Double = 0.25
+        static let activeOpacity: Double = 0.75
     }
 
     enum Focus {

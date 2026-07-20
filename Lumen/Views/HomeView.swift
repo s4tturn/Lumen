@@ -17,42 +17,50 @@ struct HomeView: View {
     @State private var pressStartTime: TimeInterval = 0
     @State private var releaseStartTime: TimeInterval = 0
 
-    private static let delay: TimeInterval = 0.15
-    private static let animDuration: TimeInterval = 0.6
-
-    private static func easeInOut(_ t: CGFloat) -> CGFloat {
-        t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t)
-    }
+    // Growth: smooth with barely-perceptible settle, organic deceleration
+    private let growthSpring = Spring(duration: 0.55, bounce: 0.05)
+    // Release: faster return, slight physical bounce on settle
+    private let releaseSpring = Spring(duration: 0.4, bounce: 0.08)
+    private static let holdDelay: TimeInterval = 0.15
+    private static let maxScale: CGFloat = 1.5
 
     var body: some View {
         TimelineView(.animation) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             let scale = animatedScale(at: time)
-            let spacing: CGFloat = 44
+            let spacing = UIConstants.DotMatrix.dotSpacing
 
             Canvas<EmptyView>(opaque: true, rendersAsynchronously: true, renderer: { context, size in
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let maxRadius = size.height / 2 + 2 * spacing
                 let numRings = max(1, Int(maxRadius / spacing))
 
-                let waveSpeed = max(1.0, Double(numRings - 1) / 5.0)
-                let cycleDuration = Double(numRings) / waveSpeed + 0.5
+                // Slower wave for more meditative rhythm
+                let waveSpeed = max(0.8, Double(numRings) / 6.0)
+                // Longer quiet pause between ripples
+                let cycleDuration = Double(numRings) / waveSpeed + 0.8
                 let cycleTime = time.truncatingRemainder(dividingBy: cycleDuration)
                 let wavePosition = cycleTime * waveSpeed
+
+                // Fade-in envelope: hides the cycle reset by starting invisible
+                // at wavePosition=0, reaching full strength over ~2 rings of travel
+                let waveFadeIn = min(1.0, wavePosition / 2.0)
 
                 for ring in 1...numRings {
                     let radius = CGFloat(ring) * spacing
                     let dotCount = 5 * ring
                     let dotCountF = CGFloat(dotCount)
-                    let rotation = CGFloat(time * 0.04 * Double(ring - 1))
+                    // 25% slower rotation for calmer idle motion
+                    let rotation = CGFloat(time * UIConstants.DotMatrix.rotationSpeed * Double(ring - 1))
 
                     let ringDist = abs(wavePosition - Double(ring))
-                    let ripple = max(0.0, exp(-ringDist * ringDist * 0.6))
+                    // Slightly wider spread for softer glow transition
+                    let ripple = max(0.0, exp(-ringDist * ringDist * UIConstants.DotMatrix.waveSpread)) * waveFadeIn
                     let dotSize = (UIConstants.DotMatrix.dotSize + ripple * UIConstants.DotMatrix.rippleScale) * scale
 
                     let shading = GraphicsContext.Shading.color(
                         .sRGB, red: 1, green: 1, blue: 1,
-                        opacity: 0.25 + 0.75 * ripple
+                        opacity: UIConstants.DotMatrix.baseOpacity + UIConstants.DotMatrix.activeOpacity * ripple
                     )
 
                     let halfDot = dotSize / 2
@@ -115,27 +123,43 @@ struct HomeView: View {
 
     private func animatedScale(at time: TimeInterval) -> CGFloat {
         if isPressing {
-            let holdDuration = CGFloat(time - pressStartTime)
-            let adjusted = max(0, holdDuration - CGFloat(Self.delay))
-            let progress = max(0, min(adjusted / CGFloat(Self.animDuration), 1))
-            let eased = Self.easeInOut(progress)
-            return 1.0 + 0.5 * eased
+            let elapsed = time - pressStartTime
+            guard elapsed > Self.holdDelay else { return 1.0 }
+            // Spring-based growth: organic deceleration, gradual settling
+            return CGFloat(growthSpring.value(
+                fromValue: 1.0,
+                toValue: Double(Self.maxScale),
+                initialVelocity: 0,
+                time: elapsed - Self.holdDelay
+            ))
         } else {
-            let releasedDuration = CGFloat(time - releaseStartTime)
-            let holdDuration = CGFloat(releaseStartTime - pressStartTime)
+            let elapsedSinceRelease = time - releaseStartTime
+            let holdDuration = releaseStartTime - pressStartTime
 
-            if holdDuration <= CGFloat(Self.delay) {
-                return 1.0
-            }
+            guard holdDuration > Self.holdDelay else { return 1.0 }
 
-            let growthAdjusted = max(0, holdDuration - CGFloat(Self.delay))
-            let growthProgress = max(0, min(growthAdjusted / CGFloat(Self.animDuration), 1))
-            let growthEased = Self.easeInOut(growthProgress)
-            let scaleAtRelease = 1.0 + 0.5 * growthEased
-
-            let reverseProgress = max(0, min(releasedDuration / CGFloat(Self.animDuration), 1))
-            let reverseEased = Self.easeInOut(reverseProgress)
-            return scaleAtRelease + (1.0 - scaleAtRelease) * reverseEased
+            // Snapshot spring state at moment of release
+            let growthElapsed = holdDuration - Self.holdDelay
+            let scaleAtRelease = growthSpring.value(
+                fromValue: 1.0,
+                toValue: Double(Self.maxScale),
+                initialVelocity: 0,
+                time: growthElapsed
+            )
+            let velocityAtRelease = growthSpring.velocity(
+                fromValue: 1.0,
+                toValue: Double(Self.maxScale),
+                initialVelocity: 0,
+                time: growthElapsed
+            )
+            // Release with velocity preservation: spring continues from current
+            // velocity, settles back to 1.0 with slight physical bounce
+            return CGFloat(releaseSpring.value(
+                fromValue: scaleAtRelease,
+                toValue: 1.0,
+                initialVelocity: velocityAtRelease,
+                time: elapsedSinceRelease
+            ))
         }
     }
 }

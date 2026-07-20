@@ -36,10 +36,11 @@ Edit this file using simple, concise, clear language. Avoid unnecessary statemen
 ## HomeView
 
 - `Canvas<EmptyView>` with `rendersAsynchronously: true` prevents the dot matrix from blocking the main thread. The matrix redraws every frame via `TimelineView(.animation)`.
-- Dots are arranged in concentric rings: ring `n` has `5n` dots. Total rings scale with screen height plus 2× spacing overflow. Dot spacing is 44pt.
+- Dots are arranged in concentric rings: ring `n` has `5n` dots. Total rings scale with screen height plus 2× spacing overflow. Dot spacing is 44pt (in `UIConstants.DotMatrix.dotSpacing`).
 - Dot size is dynamic: `(UIConstants.DotMatrix.dotSize + ripple * UIConstants.DotMatrix.rippleScale) * scale`. Base dot size is 10pt, ripple adds up to 6pt, and the whole thing scales with the long-press scale factor.
-- Wave ripple uses `exp(-ringDist² * 0.6)` for a smooth bell-curve falloff. Wave speed scales with ring count to keep the animation consistent across devices.
-- Long-press scale has a 0.15s delay before growth begins, preventing accidental scale on quick taps. The 0.6s custom quadratic easeInOut growth and reverse-release animation feel organic. Max scale is 1.5×.
+- Wave ripple uses `exp(-ringDist² * 0.55)` for a slightly wider, softer bell-curve falloff. Wave speed scales with ring count (`numRings / 6.0`) for a more meditative pace. Cycle includes a 0.8s quiet pause between ripples for a breathing rhythm.
+- Long-press scale uses SwiftUI's `Spring` model (iOS 17+) for physics-based animation instead of a custom quadratic easeInOut curve. Growth spring: `Spring(duration: 0.55, bounce: 0.05)` — smooth with barely-perceptible settle. Release spring: `Spring(duration: 0.4, bounce: 0.08)` — faster return with slight physical bounce on settle. The release captures velocity at the moment of finger-lift via `growthSpring.velocity(fromValue:toValue:initialVelocity:time:)` and feeds it as initial velocity into the release spring, giving natural velocity preservation. Max scale is 1.5×. 0.15s minimum hold delay prevents accidental triggers.
+- Ring rotation speed is 0.03 rad/s per ring index (25% slower than previous 0.04) for calmer idle motion. All rotation and opacity constants moved to `UIConstants.DotMatrix`.
 - `DotMatrixPressKey` environment key propagates press state up to `ContentView`, which dims the ambient player during hold.
 - Two `RadialGradient` overlays at top and bottom edges (35% screen height each) fade dots to black, creating a vignette without clipping.
 
