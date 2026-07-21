@@ -21,6 +21,11 @@ struct ContentView: View {
             FocusContainer(state: navigationState) {
                 CoreNavigation()
             }
+            .environment(\.onCardExpand) { expanding in
+                withAnimation(.smooth(duration: 0.6)) {
+                    ambientState = expanding ? .hidden : .visible
+                }
+            }
 
             FocusContainer(state: greetingState) {
                 GreetingView()

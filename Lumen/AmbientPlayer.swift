@@ -75,8 +75,8 @@ struct AmbientPlayer: View {
         switch mode {
         case .mini: 45
         case .compact: nil
-        case .volume: UIScreen.main.bounds.width * 0.7
-        case .expanded: UIScreen.main.bounds.width - 30
+        case .volume: UIConstants.General.screenWidth * 0.7
+        case .expanded: UIConstants.General.screenWidth - 30
         }
     }
 
@@ -100,7 +100,7 @@ struct AmbientPlayer: View {
             let clamped = min(AmbientSource.all.count - 1, max(0, row))
             hoveredSourceID = row > 0 ? AmbientSource.all[clamped].id : nil
         case .volume:
-            let sliderWidth = UIScreen.main.bounds.width * 0.7 - 30
+            let sliderWidth = UIConstants.General.screenWidth * 0.7 - 30
             volume = max(0, min(1, Float((value.location.x - 15) / sliderWidth)))
         case .mini: break
         }

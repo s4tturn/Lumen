@@ -67,6 +67,30 @@ struct HomeView: View {
                     let angleStep = 2.0 * .pi / dotCountF
                     let baseOffset = -CGFloat.pi / 2
 
+                    // Genuine Gaussian glow: dots drawn into a blurred transparency layer
+                    if ripple > 0.05 {
+                        let glowShading = GraphicsContext.Shading.color(
+                            .sRGB, red: 1, green: 1, blue: 1,
+                            opacity: Double(ripple) * UIConstants.DotMatrix.glowOpacity
+                        )
+                        context.drawLayer { ctx in
+                            ctx.addFilter(.blur(radius: UIConstants.DotMatrix.glowRadius * ripple))
+                            var glowPath = Path()
+                            for i in 0..<dotCount {
+                                let totalAngle = CGFloat(i) * angleStep + baseOffset + rotation
+                                let dx = center.x + radius * cos(totalAngle)
+                                let dy = center.y + radius * sin(totalAngle)
+                                glowPath.addEllipse(in: CGRect(
+                                    x: dx - halfDot,
+                                    y: dy - halfDot,
+                                    width: dotSize,
+                                    height: dotSize
+                                ))
+                            }
+                            ctx.fill(glowPath, with: glowShading)
+                        }
+                    }
+
                     var ringPath = Path()
                     for i in 0..<dotCount {
                         let totalAngle = CGFloat(i) * angleStep + baseOffset + rotation
