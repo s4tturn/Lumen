@@ -447,6 +447,8 @@ struct CollectionsView: View {
                     .allowsHitTesting(expandedIndex == nil)
                     .blur(radius: expandedIndex != nil ? 10 : 0)
                     .zIndex(3)
+
+
             }
             .clipped()
         }
@@ -723,6 +725,7 @@ struct CollectionsView: View {
         for _ in 0..<delta { haptic.impactOccurred(intensity: 1) }
         lastHapticRidge = target
     }
+
 }
 
 #Preview {

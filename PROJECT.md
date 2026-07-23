@@ -20,17 +20,19 @@ Liquid Glass foundation. Fluid motion, meaningful depth, restrained visuals, tac
 
 ### `Lumen/ContentView.swift`
 Entry point (`@main LumenApp`) and root orchestrator.
-- `ZStack` layers: black background → `CoreNavigation` → `GreetingView` → `AmbientPlayer` (bottom-aligned).
+- `ZStack` layers: black background → `CoreNavigation` → `GreetingView` → `AmbientPlayer` (bottom-aligned) → `CompletePill` (bottom-aligned, 70pt raised).
 - `@State` `FocusedState` variables control layer visibility for `startSequence()`.
 - `@State` `AmbientEngine` shared instance passed to `AmbientPlayer`.
 - Environment keys for `onCardExpand` and `onDotMatrixPress` coordinate cross-layer focus changes.
+- Completion pill: center pill always-in-hierarchy anchor morphs between "Complete"/"Completed". Trash circle and counter circle emerge via `glassEffectTransition(.matchedGeometry)` from the center pill's glass shape. `GlassEffectContainer(spacing: 6)` + `glassEffectID` for fluid glass splitting. 45pt elements, 70pt from bottom, `FocusedState` visibility.
 
 ### `Lumen/CoreNavigation.swift`
-4-page T-layout drag navigation.
+4-page T-layout drag navigation with rubberbanding.
 - All pages rendered in `ZStack`, offset to base positions, entire stack moves via single `offset` state.
 - `unfocusProgress(for:)` computes 0–1 from drag distance. Scale, blur, opacity derived from this single value.
 - Snap decision: 25% displacement threshold, fallback velocity prediction (0.12× factor), snaps to nearest adjacent page.
 - `adjacentPages(from:)` restricts side pages to center-only return. Center reaches all.
+- Rubberbanding: valid ranges derived from adjacent page targets per axis. Asymptotic UIScrollView curve (160pt limit, 0.7 coefficient) with critically-damped return spring (0.55s, no bounce).
 - Spring snap: `Animation.spring(duration: 0.45, bounce: 0.05)`. `.drawingGroup()` + `.compositingGroup()`.
 
 ### `Lumen/FocusedStates.swift`

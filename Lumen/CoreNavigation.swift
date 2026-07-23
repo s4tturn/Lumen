@@ -40,33 +40,73 @@ struct CoreNavigation: View {
     /// Modern duration:bounce API per WWDC2023 "Animate with springs".
     private static let snap = Animation.spring(duration: 0.45, bounce: 0.05)
 
+    /// Heavier critically-damped return for rubberband snapback — weighty, no float.
+    private static let rubberbandReturn = Animation.spring(duration: 0.55, bounce: 0.0)
+
+    // MARK: - Rubberband
+
+    /// Asymptotic rubberband curve matching UIScrollView physics.
+    /// Approaches `limit` but never reaches it — stronger resistance with distance.
+    private static func rubberBandOffset(_ x: CGFloat) -> CGFloat {
+        guard x != 0 else { return 0 }
+        let limit: CGFloat = 160
+        let coefficient: CGFloat = 0.7
+        let sign: CGFloat = x > 0 ? 1 : -1
+        return sign * limit * (1 - 1 / (abs(x) * coefficient / limit + 1))
+    }
+
+    /// Valid horizontal offset range for the given page (from adjacent page targets).
+    private func validXRange(for page: Page) -> ClosedRange<CGFloat> {
+        let values = adjacentPages(from: page).map { Self.target(for: $0).width }
+        return values.min()!...values.max()!
+    }
+
+    /// Valid vertical offset range for the given page (from adjacent page targets).
+    private func validYRange(for page: Page) -> ClosedRange<CGFloat> {
+        let values = adjacentPages(from: page).map { Self.target(for: $0).height }
+        return values.min()!...values.max()!
+    }
+
+    /// Clamps offset to valid ranges, applying rubberband resistance beyond bounds.
+    private func applyRubberband(to raw: CGSize) -> CGSize {
+        let xRange = validXRange(for: currentPage)
+        let yRange = validYRange(for: currentPage)
+
+        let x: CGFloat
+        if raw.width < xRange.lowerBound {
+            x = xRange.lowerBound + Self.rubberBandOffset(raw.width - xRange.lowerBound)
+        } else if raw.width > xRange.upperBound {
+            x = xRange.upperBound + Self.rubberBandOffset(raw.width - xRange.upperBound)
+        } else {
+            x = raw.width
+        }
+
+        let y: CGFloat
+        if raw.height < yRange.lowerBound {
+            y = yRange.lowerBound + Self.rubberBandOffset(raw.height - yRange.lowerBound)
+        } else if raw.height > yRange.upperBound {
+            y = yRange.upperBound + Self.rubberBandOffset(raw.height - yRange.upperBound)
+        } else {
+            y = raw.height
+        }
+
+        return CGSize(width: x, height: y)
+    }
+
     // MARK: - Visual Effects
 
     private static let corner = RoundedRectangle(
         cornerRadius: UIConstants.General.screenCornerRadius, style: .continuous
     )
 
-    /// 0→1 progress: how far this page is from being the focused (visible) page.
-    /// Single source of truth for all per-page visual effects.
+    /// 0→1 unfocus progress from drag displacement.
+    /// Computed once per page per frame — single source of truth for all visual effects.
     private func unfocusProgress(for page: Page) -> CGFloat {
         let t = Self.target(for: page)
-        let (dist, step): (CGFloat, CGFloat) = switch page {
-        case .bottom: (abs(offset.height - t.height), Self.stepH)
-        default:      (abs(offset.width - t.width), Self.stepW)
-        }
-        return min(dist / step, 1)
-    }
-
-    private func scale(for page: Page) -> CGFloat {
-        1 - (UIConstants.Focus.subduedScale / 100) * unfocusProgress(for: page)
-    }
-
-    private func blur(for page: Page) -> CGFloat {
-        UIConstants.Focus.subduedBlur * unfocusProgress(for: page)
-    }
-
-    private func opacity(for page: Page) -> Double {
-        1 - (1 - Double(UIConstants.Focus.subduedOpacity) / 100) * Double(unfocusProgress(for: page))
+        let delta: CGFloat = page == .bottom
+            ? abs(offset.height - t.height)
+            : abs(offset.width - t.width)
+        return min(delta / (page == .bottom ? Self.stepH : Self.stepW), 1)
     }
 
     // MARK: - Body
@@ -74,13 +114,15 @@ struct CoreNavigation: View {
     var body: some View {
         ZStack {
             ForEach(Page.allCases, id: \.self) { page in
+                let p = unfocusProgress(for: page)
+
                 pageContent(page)
                     .frame(width: Self.w, height: Self.h)
                     .clipShape(Self.corner)
-                    .scaleEffect(scale(for: page))
+                    .scaleEffect(1 - UIConstants.Focus.subduedScale / 100 * p)
                     .compositingGroup()
-                    .blur(radius: blur(for: page))
-                    .opacity(opacity(for: page))
+                    .blur(radius: UIConstants.Focus.subduedBlur * p)
+                    .opacity(1 - (1 - Double(UIConstants.Focus.subduedOpacity) / 100) * Double(p))
                     .offset(Self.base(for: page))
             }
         }
@@ -107,14 +149,16 @@ struct CoreNavigation: View {
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 5)
             .onChanged { value in
-                offset = CGSize(
+                let raw = CGSize(
                     width: lastOffset.width + value.translation.width,
                     height: lastOffset.height + value.translation.height
                 )
+                offset = applyRubberband(to: raw)
             }
             .onEnded { value in
                 let chosen = snapTarget(for: value)
-                withAnimation(Self.snap) {
+                let returningToCurrentPage = (chosen == Self.target(for: currentPage))
+                withAnimation(returningToCurrentPage ? Self.rubberbandReturn : Self.snap) {
                     offset = chosen
                     lastOffset = chosen
                 }
@@ -128,20 +172,18 @@ struct CoreNavigation: View {
     private func snapTarget(for value: DragGesture.Value) -> CGSize {
         let pages = adjacentPages(from: currentPage)
         let currentTarget = Self.target(for: currentPage)
-        let fromTarget = CGSize(
+        let drag = CGSize(
             width: offset.width - currentTarget.width,
             height: offset.height - currentTarget.height
         )
 
-        // Displacement threshold: commit if drag exceeds 25% of a page step
-        let tw = Self.stepW * 0.25, th = Self.stepH * 0.25
-
-        if let d = displacementTarget(fromTarget, tw: tw, th: th),
+        // Displacement threshold: commit if drag exceeds 25% of a page step.
+        if let d = displacementTarget(drag),
            pages.contains(where: { Self.target(for: $0) == d }) {
             return d
         }
 
-        // Velocity prediction fallback: project where the gesture is heading
+        // Velocity prediction fallback: project where the gesture is heading.
         let predicted = CGSize(
             width: offset.width + value.velocity.width * 0.12,
             height: offset.height + value.velocity.height * 0.12
@@ -160,7 +202,9 @@ struct CoreNavigation: View {
     }
 
     /// Computes the target offset from drag displacement, or nil if below threshold.
-    private func displacementTarget(_ drag: CGSize, tw: CGFloat, th: CGFloat) -> CGSize? {
+    private func displacementTarget(_ drag: CGSize) -> CGSize? {
+        let tw = Self.stepW * 0.25, th = Self.stepH * 0.25
+
         if abs(drag.width) > tw {
             return CGSize(width: drag.width > 0 ? Self.stepW : -Self.stepW, height: 0)
         }
@@ -173,10 +217,8 @@ struct CoreNavigation: View {
     /// Center can reach all pages; side pages only return to center.
     private func adjacentPages(from page: Page) -> [Page] {
         switch page {
-        case .center: [.center, .left, .right, .bottom]
-        case .left:   [.left, .center]
-        case .right:  [.right, .center]
-        case .bottom: [.bottom, .center]
+        case .center: Page.allCases
+        case .left, .right, .bottom: [page, .center]
         }
     }
 }

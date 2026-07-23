@@ -17,7 +17,6 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "000000000000000100000000"
                BuildableName = "Lumen.app"
-               BlueprintName = "Lumen"
                ReferencedContainer = "container:Lumen.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -34,20 +33,18 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      launchStyle = "1"
+      launchStyle = "0"
       useCustomWorkingDirectory = "NO"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-      allowLocationSimulation = "YES"
-      queueDebuggingEnabled = "No">
+      allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "000000000000000100000000"
             BuildableName = "Lumen.app"
-            BlueprintName = "Lumen"
             ReferencedContainer = "container:Lumen.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -64,7 +61,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "000000000000000100000000"
             BuildableName = "Lumen.app"
-            BlueprintName = "Lumen"
             ReferencedContainer = "container:Lumen.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

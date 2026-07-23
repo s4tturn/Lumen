@@ -3,7 +3,7 @@
 ## Architecture
 
 - `LumenApp` and `ContentView` share `ContentView.swift`. No separate app entry point file.
-- `ContentView` is the root orchestrator. Layers all views in a `ZStack`, manages top-level visibility via `FocusedState` on `@State` variables. Passes `AmbientEngine` as `@State` to `AmbientPlayer`.
+- `ContentView` is the root orchestrator. Layers all views in a `ZStack`, manages top-level visibility via `FocusedState` on `@State` variables. Passes `AmbientEngine` as `@State` to `AmbientPlayer`. Environment handlers extracted as method references. Startup uses structured concurrency (`Task.sleep`).
 - `CoreNavigation` handles all 4 page transitions independently of `FocusedState`. Computes unfocus progress from drag distance — faster and smoother than state-driven dimming.
 - `FocusedState`/`FocusContainer` only used by `ContentView` for startup sequence orchestration and ambient player dimming during dot matrix long-press.
 - All UI constants live in `UIConstants` enum. No magic numbers in views. `screenCornerRadius` reads private `_displayCornerRadius` API (fallback 55pt).
@@ -24,6 +24,14 @@
 - `adjacentPages(from:)`: side pages only navigate back to center. Center reaches all pages.
 - Spring snap: `Animation.spring(duration: 0.45, bounce: 0.05)` — smooth settle with subtle bounce.
 
+### Rubberbanding
+- Valid offset ranges computed per page from `adjacentPages` targets — each axis independently.
+- Dragging within valid range: 1:1 direct manipulation (no resistance).
+- Dragging past bounds: asymptotic UIScrollView curve `limit × (1 − 1/(|x|×c/limit + 1))` with `limit = 160`, `coefficient = 0.7`. Heavier than default UIScrollView (0.55) — strong resistance, never reaches max displacement.
+- Applied per-axis independently — diagonal rubberbanding on both axes simultaneously works naturally.
+- Return spring: `Animation.spring(duration: 0.55, bounce: 0.0)` — critically damped, weighty, no float.
+- Snap logic uses rubberbanded offset values, making the25% displacement threshold harder to cross in invalid directions — prevents accidental navigation.
+
 ## FocusedState
 
 - Four states: `visible`, `subdued`, `subduedAlt`, `hidden`. Blur/opacity/scale from `UIConstants.Focus`.
@@ -34,9 +42,10 @@
 
 ## Startup Sequence
 
-- `startSequence()` uses `DispatchQueue.main.asyncAfter`:
-  - 0.1s: greeting fades in (0.8s smooth)
-  - 3.1s: greeting fades out, navigation and ambient fade in (0.8s smooth)
+- `startupSequence()` is an `async` function called via `.task` modifier:
+  - 100ms: greeting fades in (0.8s smooth)
+  - 3s more: greeting fades out, navigation and ambient fade in (0.8s smooth)
+- `.task` cancels automatically if view leaves hierarchy — no dangling timers.
 - All startup transitions: `.smooth(duration: 0.8)`.
 - Initial states: greeting `.hidden`, navigation `.subduedAlt`, ambient `.subdued`.
 - Ambient player dims to `.subdued` during dot matrix long-press (`.smooth(duration: 0.6)`), returns to `.visible` on release via `DotMatrixPressKey` environment key.
@@ -161,6 +170,15 @@ Each gesture is a private method on `CollectionsView`, composed via `.highPriori
 ## Glass Effect Ordering
 
 - Apply `.rotationEffect` before `.glassEffect`. Glass effect breaks if applied before rotation in modifier chain. Inner view rotations (e.g., TickMarksView rotation inside ZStack) are safe as long as `.glassEffect` is applied after parent container's layout.
+
+## Project Settings
+
+- iOS-only build. `SDKROOT = iphoneos`, `SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"`, `TARGETED_DEVICE_FAMILY = 1`.
+- Mac Catalyst, MacDesignedForIPhone, and XRDesignedForIPhone all disabled.
+- Platform settings (`SDKROOT`, `SUPPORTED_PLATFORMS`, `SUPPORTS_*`, `TARGETED_DEVICE_FAMILY`, `IPHONEOS_DEPLOYMENT_TARGET`) at project level — inherited by all targets.
+- Signing and Info.plist settings at target level only.
+- `ALWAYS_SEARCH_USER_PATHS = NO` suppresses headermap migration warning.
+- Release: `DEAD_CODE_STRIPPING = YES`, `SWIFT_COMPILATION_MODE = wholemodule`, `SWIFT_OPTIMIZATION_LEVEL = "-O"`.
 
 ## Known Limitations
 
