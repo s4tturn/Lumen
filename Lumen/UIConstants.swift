@@ -20,15 +20,17 @@ enum UIConstants {
     }
 
     enum Focus {
+        /// Moderate de-focus: content recedes but stays readable. Matches the
+        /// "unfocus" blur CoreNavigation drives by drag progress.
         static let subduedBlur: CGFloat = 10
-        static let subduedOpacity: CGFloat = 80
+        /// Dim to 65% — Apple's guidance is to layer a 35%-opacity dark scrim
+        /// over bright content beneath clear glass (HIG "Materials").
+        static let subduedOpacity: CGFloat = 65
+        /// Scale-down fraction — iOS app-switcher / folder-open cards recede
+        /// to roughly 0.9.
         static let subduedScale: CGFloat = 10
-        static let subduedAltBlur: CGFloat = 10
-        static let subduedAltOpacity: CGFloat = 80
-        static let subduedAltScale: CGFloat = 0
-        static let hiddenBlur: CGFloat = 20
-        static let hiddenOpacity: CGFloat = 0
-        static let hiddenScale: CGFloat = 20
+        /// "Blur out": a heavy blur that dissolves content into a soft glow.
+        static let hiddenBlur: CGFloat = 30
     }
 
     enum Collections {
@@ -57,6 +59,8 @@ enum UIConstants {
         static let tickHeight: CGFloat = 40
         /// Number of visible cards on each side of center in carousel.
         static let visibleCardRadius: Int = 2
+        /// Heavy blur applied to the collection photo behind the expanded card.
+        static let expandedBackgroundBlur: CGFloat = 30
     }
 
     enum General {

@@ -13,109 +13,182 @@ extension EnvironmentValues {
     }
 }
 
-// MARK: - Model
+// MARK: - Focused Item Change Environment Key
 
-struct CollectionItem: Equatable, Identifiable {
+struct FocusedItemChangeKey: EnvironmentKey {
+    static let defaultValue: (FocusedItem?) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var onFocusedItemChange: (FocusedItem?) -> Void {
+        get { self[FocusedItemChangeKey.self] }
+        set { self[FocusedItemChangeKey.self] = newValue }
+    }
+}
+
+// MARK: - Models
+
+/// A single task inside a collection. Each task is an object with its own
+/// emoji, name, and description of what the task is.
+struct TaskObject: Equatable, Identifiable {
     let id = UUID()
     let emoji: String
     let name: String
+    let task: String
 }
 
 struct Collection: Identifiable {
     let id = UUID()
     let name: String
     let color: Color
-    let items: [CollectionItem]
+    let backgroundImage: String
+    let items: [TaskObject]
 }
 
 // MARK: - Sample Data
 
 private let collections: [Collection] = [
-    Collection(name: "Dawn", color: Color(red: 1, green: 0.76, blue: 0.46), items: [
-        .init(emoji: "☀️", name: "Sun"),
-        .init(emoji: "🌅", name: "Sunrise"),
-        .init(emoji: "🌄", name: "Morning"),
-        .init(emoji: "🐦", name: "Bird"),
-        .init(emoji: "🌻", name: "Sunflower"),
-        .init(emoji: "☁️", name: "Cloud"),
-        .init(emoji: "🌤️", name: "Clear Sky"),
-        .init(emoji: "🦋", name: "Butterfly"),
+    Collection(name: "Desk", color: CollectionBackgrounds.averageColor(named: "DeskBackground") ?? .orange, backgroundImage: "DeskBackground", items: [
+        .init(emoji: "🗂️", name: "Inbox", task: "Clear the loose papers from your desk"),
+        .init(emoji: "✏️", name: "Pencil", task: "Sharpen and sort your writing tools"),
+        .init(emoji: "📄", name: "Paper", task: "File away the stray papers"),
+        .init(emoji: "🔌", name: "Cable", task: "Tidy the cables on your desk"),
+        .init(emoji: "🖥️", name: "Screen", task: "Wipe your screen and keyboard clean"),
+        .init(emoji: "🗑️", name: "Bin", task: "Empty the trash by your desk"),
+        .init(emoji: "📋", name: "List", task: "Write out your plan for the day"),
+        .init(emoji: "🧲", name: "Magnet", task: "Pin your notes where you can see them"),
+        .init(emoji: "📚", name: "Books", task: "Return the books to their shelf"),
+        .init(emoji: "🕯️", name: "Focus", task: "Clear a calm, empty space to work"),
     ]),
-    Collection(name: "Ocean", color: Color(red: 0.46, green: 0.76, blue: 1), items: [
-        .init(emoji: "🌊", name: "Wave"),
-        .init(emoji: "🐚", name: "Shell"),
-        .init(emoji: "🐠", name: "Fish"),
-        .init(emoji: "🐙", name: "Octopus"),
-        .init(emoji: "⚓", name: "Anchor"),
-        .init(emoji: "🐳", name: "Whale"),
-        .init(emoji: "🪸", name: "Coral"),
-        .init(emoji: "🚢", name: "Sailboat"),
+    Collection(name: "Kitchen", color: CollectionBackgrounds.averageColor(named: "KitchenBackground") ?? .blue, backgroundImage: "KitchenBackground", items: [
+        .init(emoji: "🧽", name: "Sponge", task: "Wash the dishes"),
+        .init(emoji: "🍽️", name: "Plate", task: "Put the clean dishes away"),
+        .init(emoji: "🥄", name: "Spoon", task: "Sort the cutlery"),
+        .init(emoji: "🧴", name: "Soap", task: "Refill the soap dispenser"),
+        .init(emoji: "🧊", name: "Fridge", task: "Clear the fridge of anything old"),
+        .init(emoji: "🔥", name: "Stove", task: "Wipe down the stovetop"),
+        .init(emoji: "🗑️", name: "Compost", task: "Take out the compost"),
+        .init(emoji: "🥤", name: "Mug", task: "Return the mugs to the cupboard"),
+        .init(emoji: "🧂", name: "Spice", task: "Put the spices back in order"),
+        .init(emoji: "🧹", name: "Mop", task: "Mop the kitchen floor"),
     ]),
-    Collection(name: "Dusk", color: Color(red: 0.76, green: 0.46, blue: 1), items: [
-        .init(emoji: "🌙", name: "Moon"),
-        .init(emoji: "🌌", name: "Galaxy"),
-        .init(emoji: "🦉", name: "Owl"),
-        .init(emoji: "🌠", name: "Shooting Star"),
-        .init(emoji: "🍂", name: "Maple Leaf"),
-        .init(emoji: "🕯️", name: "Candle"),
-        .init(emoji: "🌆", name: "Sunset"),
-        .init(emoji: "🦇", name: "Bat"),
+    Collection(name: "Garden", color: CollectionBackgrounds.averageColor(named: "GardenBackground") ?? .green, backgroundImage: "GardenBackground", items: [
+        .init(emoji: "💧", name: "Water", task: "Water the thirsty plants"),
+        .init(emoji: "🌱", name: "Sprout", task: "Plant a new seed"),
+        .init(emoji: "✂️", name: "Snips", task: "Trim the dead leaves"),
+        .init(emoji: "🪴", name: "Pot", task: "Repot a plant that's outgrown its pot"),
+        .init(emoji: "🌿", name: "Fern", task: "Mist the leafy plants"),
+        .init(emoji: "🐞", name: "Ladybug", task: "Check the leaves for little visitors"),
+        .init(emoji: "🧤", name: "Gloves", task: "Turn the soil and loosen it"),
+        .init(emoji: "☀️", name: "Light", task: "Move the plants toward the sun"),
+        .init(emoji: "🪱", name: "Worm", task: "Feed the compost pile"),
+        .init(emoji: "🌸", name: "Bloom", task: "Pick the spent flowers"),
     ]),
-    Collection(name: "Moss", color: Color(red: 0.46, green: 1, blue: 0.66), items: [
-        .init(emoji: "🌿", name: "Fern"),
-        .init(emoji: "🍀", name: "Clover"),
-        .init(emoji: "🌱", name: "Sprout"),
-        .init(emoji: "🐸", name: "Frog"),
-        .init(emoji: "🪨", name: "Stone"),
-        .init(emoji: "🍃", name: "Leaf"),
-        .init(emoji: "🌳", name: "Tree"),
-        .init(emoji: "🐛", name: "Caterpillar"),
+    Collection(name: "Compassion", color: CollectionBackgrounds.averageColor(named: "CompassionBackground") ?? .red, backgroundImage: "CompassionBackground", items: [
+        .init(emoji: "🐾", name: "Paws", task: "Take a dog for a walk"),
+        .init(emoji: "🥣", name: "Bowl", task: "Fill the water bowl"),
+        .init(emoji: "🦴", name: "Bone", task: "Give a pet a treat"),
+        .init(emoji: "🧹", name: "Litter", task: "Scoop the litter box"),
+        .init(emoji: "🐦", name: "Seed", task: "Refill the bird feeder"),
+        .init(emoji: "🧺", name: "Blanket", task: "Wash the pet's bedding"),
+        .init(emoji: "🐈", name: "Cat", task: "Play with a cat for ten minutes"),
+        .init(emoji: "🪮", name: "Brush", task: "Groom a furry friend"),
+        .init(emoji: "🐝", name: "Bee", task: "Plant something for the bees"),
+        .init(emoji: "🚪", name: "Shelter", task: "Give a stray a safe corner"),
     ]),
-    Collection(name: "Rose", color: Color(red: 1, green: 0.46, blue: 0.66), items: [
-        .init(emoji: "🌹", name: "Rose"),
-        .init(emoji: "💐", name: "Bouquet"),
-        .init(emoji: "🌸", name: "Blossom"),
-        .init(emoji: "🦩", name: "Flamingo"),
-        .init(emoji: "🍓", name: "Strawberry"),
-        .init(emoji: "🎀", name: "Ribbon"),
-        .init(emoji: "🕊️", name: "Dove"),
-        .init(emoji: "🩷", name: "Pink Heart"),
-    ]),
-    Collection(name: "Lavender", color: Color(red: 0.66, green: 0.66, blue: 1), items: [
-        .init(emoji: "💜", name: "Purple Heart"),
-        .init(emoji: "🦋", name: "Butterfly"),
-        .init(emoji: "🌾", name: "Lavender"),
-        .init(emoji: "🫐", name: "Blueberry"),
-        .init(emoji: "💎", name: "Crystal"),
-        .init(emoji: "🌙", name: "Moon"),
-        .init(emoji: "✨", name: "Sparkles"),
-        .init(emoji: "🎵", name: "Music"),
-    ]),
-    Collection(name: "Amber", color: Color(red: 1, green: 0.6, blue: 0.2), items: [
-        .init(emoji: "🔥", name: "Fire"),
-        .init(emoji: "🍂", name: "Maple Leaf"),
-        .init(emoji: "🧡", name: "Orange Heart"),
-        .init(emoji: "🐝", name: "Bee"),
-        .init(emoji: "🍯", name: "Honey"),
-        .init(emoji: "🌾", name: "Wheat"),
-        .init(emoji: "🦊", name: "Fox"),
-        .init(emoji: "🪵", name: "Wood"),
-    ]),
-    Collection(name: "Silver", color: Color(red: 0.75, green: 0.78, blue: 0.82), items: [
-        .init(emoji: "❄️", name: "Snowflake"),
-        .init(emoji: "🌫️", name: "Fog"),
-        .init(emoji: "🪶", name: "Feather"),
-        .init(emoji: "🦢", name: "Swan"),
-        .init(emoji: "🌙", name: "Moon"),
-        .init(emoji: "✨", name: "Star"),
-        .init(emoji: "🐈", name: "Cat"),
-        .init(emoji: "🩶", name: "Gray Heart"),
+    Collection(name: "Connection", color: CollectionBackgrounds.averageColor(named: "ConnectionBackground") ?? .purple, backgroundImage: "ConnectionBackground", items: [
+        .init(emoji: "📞", name: "Call", task: "Call a friend you've been missing"),
+        .init(emoji: "✉️", name: "Letter", task: "Write a note to a loved one"),
+        .init(emoji: "👋", name: "Hello", task: "Say hello to someone new"),
+        .init(emoji: "🫂", name: "Hug", task: "Hug someone who needs it"),
+        .init(emoji: "🎁", name: "Gift", task: "Give a small gift for no reason"),
+        .init(emoji: "💬", name: "Bubble", task: "Start a chat with a stranger"),
+        .init(emoji: "👂", name: "Ear", task: "Listen fully, without interrupting"),
+        .init(emoji: "🌟", name: "Compliment", task: "Give a genuine compliment"),
+        .init(emoji: "🪑", name: "Seat", task: "Invite someone for a coffee"),
+        .init(emoji: "📅", name: "Plan", task: "Make plans with a friend"),
     ]),
 ]
+
+// MARK: - Geometry Helpers
 
 /// Wraps any index into the collections array cyclically.
 private func getCollection(at index: Int) -> Collection {
     collections[((index % collections.count) + collections.count) % collections.count]
+}
+
+/// True Euclidean modulo — always non-negative.
+private func positiveMod(_ value: Int, _ modulus: Int) -> Int {
+    ((value % modulus) + modulus) % modulus
+}
+
+// MARK: - Card Backgrounds
+
+/// Lazily loads and caches the bundled collection background photos.
+/// Images are loose resources (bundled via the file-system synchronized
+/// group), so they're located through `Bundle` rather than the asset catalog.
+private enum CollectionBackgrounds {
+    private static let cache: [String: UIImage] = {
+        let names = [
+            "DeskBackground", "KitchenBackground", "GardenBackground",
+            "CompassionBackground", "ConnectionBackground",
+        ]
+        var loaded: [String: UIImage] = [:]
+        for name in names {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
+                  let image = UIImage(contentsOfFile: url.path) else { continue }
+            loaded[name] = image
+        }
+        return loaded
+    }()
+
+    static func image(named name: String) -> Image? {
+        cache[name].map(Image.init(uiImage:))
+    }
+
+    /// The collection's signature color: the average color of its photo.
+    static func averageColor(named name: String) -> Color? {
+        cache[name]?.averageColor.map(Color.init(uiColor:))
+    }
+}
+
+extension UIImage {
+    /// Average color of the whole image, computed from a downsampled copy.
+    var averageColor: UIColor? {
+        let size = CGSize(width: 50, height: 50)
+        let sampled = UIGraphicsImageRenderer(size: size).image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let sample = sampled.cgImage,
+              let data = sample.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return nil }
+
+        let width = sample.width
+        let height = sample.height
+        let bytesPerRow = sample.bytesPerRow
+        let bytesPerPixel = sample.bitsPerPixel / 8
+
+        var totalRed = 0.0
+        var totalGreen = 0.0
+        var totalBlue = 0.0
+        let count = Double(width * height)
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                totalBlue  += Double(bytes[offset])
+                totalGreen += Double(bytes[offset + 1])
+                totalRed   += Double(bytes[offset + 2])
+            }
+        }
+
+        return UIColor(
+            red: CGFloat(totalRed / count / 255),
+            green: CGFloat(totalGreen / count / 255),
+            blue: CGFloat(totalBlue / count / 255),
+            alpha: 1
+        )
+    }
 }
 
 // MARK: - Animation Springs
@@ -134,7 +207,11 @@ extension Animation {
     static let itemSwipe   = Animation.interpolatingSpring(mass: 0.8, stiffness: 260, damping: 24)
 }
 
-// MARK: - Card Layout
+// MARK: - Turntable Geometry
+
+/// Number of card stops around the full dial — a property of the turntable,
+/// independent of how many collections actually exist.
+private var cardStopCount: Int { Int(360.0 / UIConstants.Collections.cardAngle) }
 
 /// Pure-data descriptor for a single card's visual state.
 /// Computing this once per card per frame is cheaper than scattering math in ViewBuilder.
@@ -148,11 +225,11 @@ private struct CardLayout: Equatable {
     let zIndex: Double
 }
 
-/// Derives all 5 cards' layouts from the current turntable position.
-/// - Parameter fractional: negative rotation / 45° — the continuous "rotor position".
+/// Derives the visible cards' layouts from the current turntable position.
+/// - Parameter fractional: negative rotation / cardAngle — the continuous "rotor position".
 /// - Parameter cardSize: width of a single card.
 /// - Parameter spacing: center-to-center distance between adjacent cards.
-/// - Returns: Array of 5 CardLayouts, ordered from leftmost to rightmost.
+/// - Returns: Array of CardLayouts, ordered from leftmost to rightmost.
 private func cardLayouts(
     fractional: Double,
     cardSize: CGFloat,
@@ -222,6 +299,26 @@ private struct CardView: View, Equatable {
 
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(getCollection(at: layout.index).color)
+            .overlay {
+                if let background = CollectionBackgrounds.image(
+                    named: getCollection(at: layout.index).backgroundImage
+                ) {
+                    background
+                        .resizable()
+                        .scaledToFill()
+                        // Crop to the card's face — square when collapsed, full
+                        // screen when expanded — then round the corners.
+                        .frame(
+                            width: expanded ? UIConstants.General.screenWidth : size,
+                            height: expanded ? UIConstants.General.screenHeight : size
+                        )
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        // The photo is always the card's face; it just blurs out
+                        // behind the expanded content.
+                        .blur(radius: expanded ? UIConstants.Collections.expandedBackgroundBlur : 0)
+                }
+            }
             .overlay(
                 ExpandedCollectionView(
                     index: layout.index,
@@ -275,9 +372,15 @@ private struct ExpandedCollectionView: View {
                     VStack(spacing: 30) {
                         Text(item.emoji)
                             .font(.system(size: 180))
-                        Text(item.name)
-                            .font(.system(size: 32, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.85))
+                        VStack(spacing: 8) {
+                            Text(item.name)
+                                .font(.system(size: 32, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
+                            Text(item.task)
+                                .font(.system(size: 20, weight: .regular, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                        }
                     }
                     .frame(width: pw, height: geo.size.height)
                     .offset(x: offset)
@@ -298,22 +401,37 @@ private struct ExpandedCollectionView: View {
 
 // MARK: - TickMarksView
 
+/// Ridges on the turntable dial: one per card stop around the full circle,
+/// evenly spaced by `cardAngle`. Their count is a property of the turntable,
+/// not of the data, so they align with the cards regardless of how many
+/// collections exist.
+///
+/// Each ridge is painted with the color of the card currently sitting in its
+/// angular slot. Because the slot assignment is derived from the live rotation
+/// (and snapped to the dial grid), the ridge pointing at the centered card
+/// always matches that card's color — even when scrolling fast, when the
+/// ridge cycle (one per stop) and the collection cycle (one per collection)
+/// would otherwise drift apart.
 private struct TickMarksView: View {
     let rotation: Double
     let radius: CGFloat
 
     var body: some View {
-        let count = collections.count
-        let step = 360.0 / Double(count)
+        let count = cardStopCount
+        let step = UIConstants.Collections.cardAngle
         let tW = UIConstants.Collections.tickWidth
         let tH = UIConstants.Collections.tickHeight
+        // Card index currently at the top slot, snapped down to the dial grid
+        // so each ridge keeps the same card while the dial is between stops.
+        let current = Int(round(-rotation / step))
+        let baseIndex = current - positiveMod(current, count)
 
         ZStack {
             ForEach(0..<count, id: \.self) { i in
                 Capsule(style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.white, collections[i].color],
+                            colors: [.white, getCollection(at: baseIndex + i).color],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -329,11 +447,6 @@ private struct TickMarksView: View {
         .rotationEffect(.degrees(rotation))
     }
 }
-
-// MARK: - Gestures
-
-// Using Apple's gesture composition pattern: each gesture is a standalone method
-// on the view that owns the mutable state.
 
 // MARK: - CollectionsView
 
@@ -353,6 +466,7 @@ struct CollectionsView: View {
     @State private var itemIndex: Int = 0
     @State private var expandedDragLock: Bool? = nil
     @Environment(\.onCardExpand) private var onCardExpand
+    @Environment(\.onFocusedItemChange) private var onFocusedItemChange
 
     /// True whenever the expanded card is animating in, fully expanded, or animating out.
     /// Controls primary card elevation (zIndex 4 vs 2) and ghost card visibility.
@@ -360,8 +474,27 @@ struct CollectionsView: View {
         expandedIndex != nil || animatingInIndex != nil || animatingOutIndex != nil
     }
 
+    /// The card currently elevated, in priority order.
+    private var primaryIndex: Int? {
+        expandedIndex ?? animatingInIndex ?? animatingOutIndex
+    }
+
+    /// Identity of the emoji item currently centered in the expanded card.
+    private var focusedItem: FocusedItem? {
+        guard let index = expandedIndex else { return nil }
+        let collection = getCollection(at: index)
+        let item = collection.items[itemIndex]
+        return FocusedItem(
+            key: "\(collection.name)/\(item.name)",
+            collectionColor: collection.color
+        )
+    }
+
     /// Shared haptic generator — created once per view instance (Apple HIG).
     private let haptic = UIImpactFeedbackGenerator(style: .medium)
+
+    /// Convenience: total rotation including live drag.
+    private var totalRotation: Double { rotation + dragOffset }
 
     // MARK: - Body
 
@@ -391,7 +524,7 @@ struct CollectionsView: View {
                     let isFocused = abs(Double(layout.index) - fractional) < 0.5
                     // The "primary" card is the one being expanded or dismissed.
                     // During dismiss, expandedIndex is nil but animatingOutIndex retains the card.
-                    let isPrimary = layout.index == (expandedIndex ?? animatingInIndex ?? animatingOutIndex)
+                    let isPrimary = layout.index == primaryIndex
 
                     CardView(
                         layout: layout,
@@ -425,16 +558,22 @@ struct CollectionsView: View {
                 }
 
                 // ── Ghost card (zIndex 2, between non-primary cards and turntable) ──
-                // Mirrors the primary card exactly. Visible only while the primary is elevated
-                // (zIndex 4), providing visual continuity behind the turntable (zIndex 3).
-                // Appears/disappears instantly — no fades or animations.
-                if isPrimaryElevated, let gi = expandedIndex ?? animatingInIndex ?? animatingOutIndex {
-                    makeCardView(
-                        index: gi,
-                        fractional: fractional,
-                        cardSize: cardSize,
-                        spacing: spacing,
-                        cardsOffsetY: cardsOffsetY
+                // Mirrors the primary card exactly, using the same layout math as
+                // the carousel so they can never drift apart. Visible only while
+                // the primary is elevated (zIndex 4), providing visual continuity
+                // behind the turntable (zIndex 3). Appears/disappears instantly.
+                if isPrimaryElevated,
+                   let gi = primaryIndex,
+                   let ghostLayout = layouts.first(where: { $0.index == gi }) {
+                    CardView(
+                        layout: ghostLayout,
+                        size: cardSize,
+                        expanded: gi == expandedIndex,
+                        parentOffsetY: cardsOffsetY,
+                        dismissOffset: gi == expandedIndex ? dismissOffset : .zero,
+                        dismissProgress: gi == expandedIndex ? dismissProgress() : 0,
+                        swipeOffset: gi == expandedIndex ? itemSwipeOffset : 0,
+                        itemIndex: itemIndex
                     )
                     .allowsHitTesting(false)
                     .transition(.identity)
@@ -447,14 +586,13 @@ struct CollectionsView: View {
                     .allowsHitTesting(expandedIndex == nil)
                     .blur(radius: expandedIndex != nil ? 10 : 0)
                     .zIndex(3)
-
-
             }
             .clipped()
         }
         .ignoresSafeArea()
         .onChange(of: expandedIndex) { _, index in
             onCardExpand(index != nil)
+            onFocusedItemChange(focusedItem)
             if index != nil {
                 itemIndex = 0
                 itemSwipeOffset = 0
@@ -462,39 +600,9 @@ struct CollectionsView: View {
                 expandedDragLock = nil
             }
         }
-    }
-
-    /// Shared CardView builder used by the ghost card.
-    private func makeCardView(index: Int, fractional: Double, cardSize: CGFloat, spacing: CGFloat, cardsOffsetY: CGFloat) -> CardView {
-        let delta  = Double(index) - fractional
-        let d      = abs(delta)
-        let expanded = index == expandedIndex
-
-        let dismissDistance: CGFloat = expanded
-            ? sqrt(dismissOffset.width * dismissOffset.width + dismissOffset.height * dismissOffset.height)
-            : 0
-        let dismissProgress: CGFloat = expanded
-            ? min(1, max(0, dismissDistance / UIConstants.Collections.dismissFullDistance))
-            : 0
-
-        return CardView(
-            layout: CardLayout(
-                index: index,
-                scale: max(0.8, 1 - 0.12 * d),
-                opacity: max(0, 1 - 0.2 * d),
-                rotation: delta * 10,
-                offsetX: CGFloat(delta) * spacing,
-                offsetY: CGFloat(d * d * 16),
-                zIndex: 0
-            ),
-            size: cardSize,
-            expanded: expanded,
-            parentOffsetY: cardsOffsetY,
-            dismissOffset: expanded ? dismissOffset : .zero,
-            dismissProgress: dismissProgress,
-            swipeOffset: expanded ? itemSwipeOffset : 0,
-            itemIndex: itemIndex
-        )
+        .onChange(of: itemIndex) { _, _ in
+            onFocusedItemChange(focusedItem)
+        }
     }
 
     // MARK: - Dismiss Progress
@@ -701,9 +809,6 @@ struct CollectionsView: View {
             }
     }
 
-    /// Convenience: total rotation including live drag.
-    private var totalRotation: Double { rotation + dragOffset }
-
     // MARK: - Helpers
 
     private func snapToNearest() {
@@ -725,7 +830,6 @@ struct CollectionsView: View {
         for _ in 0..<delta { haptic.impactOccurred(intensity: 1) }
         lastHapticRidge = target
     }
-
 }
 
 #Preview {

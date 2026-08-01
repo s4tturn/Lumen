@@ -8,8 +8,9 @@ struct AmbientPlayer: View {
     @State private var selectedSourceID: AmbientSource.ID?
     @State private var hoveredSourceID: AmbientSource.ID?
 
-    /// Fast morph spring — quick, slightly bouncy, blends smoothly through rapid mode changes.
-    private let spring = Animation.spring(duration: 0.28, bounce: 0.04, blendDuration: 0.2)
+    /// Fluid morph spring — unhurried and seamless, blends smoothly through
+    /// rapid mode changes.
+    private let spring = Animation.spring(duration: 0.35, bounce: 0.04, blendDuration: 0.2)
 
     var body: some View {
         VStack(spacing: 0) {

@@ -19,10 +19,10 @@
 - `pageSpacing` (25pt) creates visible gap between pages during transition.
 
 ### Snap Logic
-- `unfocusProgress(for:)` computes 0–1 from distance between current offset and target page offset. Scale, blur, opacity all derived from this single value.
+- `unfocusProgress(for:)` computes 0–1 from distance between current offset and target page offset. Scale, blur, opacity all derived from this single value, interpolating `FocusedState.subdued` (see FocusedState section) — navigation uses the same focus language as every other layer.
 - Snap threshold: 25% of page step width/height. Falls back to velocity prediction (0.12× factor), picks nearest adjacent page.
 - `adjacentPages(from:)`: side pages only navigate back to center. Center reaches all pages.
-- Spring snap: `Animation.spring(duration: 0.45, bounce: 0.05)` — smooth settle with subtle bounce.
+- Spring snap: `Animation.spring(duration: 0.5, bounce: 0.05)` — fluid settle with subtle bounce. Rubberband return: 0.6s critically damped.
 
 ### Rubberbanding
 - Valid offset ranges computed per page from `adjacentPages` targets — each axis independently.
@@ -34,21 +34,32 @@
 
 ## FocusedState
 
-- Four states: `visible`, `subdued`, `subduedAlt`, `hidden`. Blur/opacity/scale from `UIConstants.Focus`.
-- `subdued`: blur 10, opacity 0.8, scale 0.9.
-- `subduedAlt`: blur 10, opacity 0.8, scale 1.0 (dim without scale reduction).
-- `hidden`: blur 20, opacity 0, scale 0.8.
-- `FocusContainer` accepts `alignment` parameter. `Alignment.anchor` extension maps to `UnitPoint` for correct `scaleEffect` anchor (e.g., `.bottom` for ambient player).
+- Four states: `visible`, `subdued`, `subduedAlt`, `hidden`. `visible` is the normal look; the other three are *relationships* to the shared subdued look in `UIConstants.Focus`:
+  - `subdued`: recedes — blur 10, dim 0.65, scale 0.9.
+  - `subduedAlt`: recedes without shrinking — blur 10, dim 0.65, scale 1.0.
+  - `hidden`: dissolves — heavy "blur out" (blur 30) with `subdued`'s scale 0.9, plus a curved accelerating fade (`.easeIn`) to **opacity 0**, so the element is fully gone — no residual glow — by the end of the transition.
+- Values are Apple-grounded (HIG "Materials"): the dim 0.65 matches Apple's guidance to layer a 35%-opacity dark scrim over bright content beneath clear glass; scale 0.9 matches the ~0.9 recession of iOS app-switcher / folder-open cards.
+- Each state owns its motion *and* its fade: a `duration` (seconds), a `motion` spring, and a `fade` curve, used when transitioning INTO that state. Per Apple's motion guidance (WWDC18 "Designing Fluid Interfaces", WWDC23 "Animate with springs", HIG "Motion"): spring-driven and critically damped (`extraBounce: 0`). Timings are unhurried for an ambient app — focusing in is responsive (`visible` → `.snappy(duration: 0.4)`); yielding is fluid (`subdued`/`subduedAlt` → `.smooth(duration: 0.55)`); dissolving is longest and most atmospheric (`hidden` → `.smooth(duration: 0.7)` for blur/scale).
+- `hidden`'s fade is deliberately different: opacity uses `.easeIn(duration: 0.7)` — Apple's classic exit pacing ("begins slowly, then speeds up") — which lands on exactly 0 at `duration`, guaranteeing invisibility (a spring would asymptote and leave a sub-1% residual).
+- `FocusContainer` applies the two animations per property (blur/scale on `state.motion`, opacity on `state.fade`) internally, so call sites just set `state` — timing lives in one place, no `withAnimation` at the call site.
+- `FocusContainer` composits content with `.compositingGroup()` before blur so blur/opacity/scale apply to a single layer (correct look, one blur pass), and accepts `alignment` parameter. `Alignment.anchor` extension maps to `UnitPoint` for correct `scaleEffect` anchor (e.g., `.bottom` for ambient player).
+- Greeting, navigation, collection button (the Complete pill), and ambient player are all focus-driven through `FocusContainer` — none implement their own dim/blur/fade:
+  - greeting: `greetingState` in `ContentView`
+  - navigation: `navigationState` for the container; the drag-driven per-page *unfocus* interpolates `FocusedState.subdued` by drag progress (scale/blur/opacity all derived from the state, no inline constants)
+  - collection button: `pillState` — a persistent `FocusContainer` (no `if`/`transition(.opacity)`); `isCardExpanded` only gates `.allowsHitTesting` so the hidden pill never blocks touches
+  - ambient player: `ambientState`; its internal morph spring (0.35) is widget behavior, not focus
 
 ## Startup Sequence
 
-- `startupSequence()` is an `async` function called via `.task` modifier:
-  - 100ms: greeting fades in (0.8s smooth)
-  - 3s more: greeting fades out, navigation and ambient fade in (0.8s smooth)
+- `startupSequence()` is an `async` function called via `.task` modifier. Beat timings are named constants so each is tuned independently. The whole greeting sequence runs in ~2.0s — a quiet, unhurried open (HIG "Launching" — launch instantly; "Onboarding" — splash just long enough to absorb at a glance):
+  - `appearDelay` (100ms): pause before the entrance
+  - greeting fades in with `FocusedState.visible` (snappy 0.4s)
+  - `holdDuration` (0.8s): greeting dwells fully visible — measured from fade-in *completion* (via `FocusedState.visible.duration`), so dwell never varies with fade speed
+  - greeting fades out with `FocusedState.hidden` (curved easeIn 0.7s) as navigation and ambient fade in with `FocusedState.visible` simultaneously — the interface is usable immediately, no separate reveal beat
 - `.task` cancels automatically if view leaves hierarchy — no dangling timers.
-- All startup transitions: `.smooth(duration: 0.8)`.
+- All motion is owned by `FocusedState.motion`/`fade`; the startup sequence sets states directly, with no `withAnimation`.
 - Initial states: greeting `.hidden`, navigation `.subduedAlt`, ambient `.subdued`.
-- Ambient player dims to `.subdued` during dot matrix long-press (`.smooth(duration: 0.6)`), returns to `.visible` on release via `DotMatrixPressKey` environment key.
+- Ambient player dims to `.subdued` during dot matrix long-press (fluid 0.55s smooth), returns to `.visible` on release (responsive 0.4s snappy) via `DotMatrixPressKey` environment key.
 
 ## HomeView (Dot Matrix)
 

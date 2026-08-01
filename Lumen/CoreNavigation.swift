@@ -38,10 +38,10 @@ struct CoreNavigation: View {
 
     /// Smooth snap with subtle bounce — rewards gesture momentum (WWDC2018 "Designing Fluid Interfaces").
     /// Modern duration:bounce API per WWDC2023 "Animate with springs".
-    private static let snap = Animation.spring(duration: 0.45, bounce: 0.05)
+    private static let snap = Animation.spring(duration: 0.5, bounce: 0.05)
 
     /// Heavier critically-damped return for rubberband snapback — weighty, no float.
-    private static let rubberbandReturn = Animation.spring(duration: 0.55, bounce: 0.0)
+    private static let rubberbandReturn = Animation.spring(duration: 0.6, bounce: 0.0)
 
     // MARK: - Rubberband
 
@@ -115,14 +115,18 @@ struct CoreNavigation: View {
         ZStack {
             ForEach(Page.allCases, id: \.self) { page in
                 let p = unfocusProgress(for: page)
+                // The unfocused look IS FocusedState.subdued, interpolated by
+                // drag progress — navigation uses the same focus language as
+                // every other layer instead of its own inline values.
+                let subdued = FocusedState.subdued
 
                 pageContent(page)
                     .frame(width: Self.w, height: Self.h)
                     .clipShape(Self.corner)
-                    .scaleEffect(1 - UIConstants.Focus.subduedScale / 100 * p)
+                    .scaleEffect(1 - (1 - subdued.scale) * p)
                     .compositingGroup()
-                    .blur(radius: UIConstants.Focus.subduedBlur * p)
-                    .opacity(1 - (1 - Double(UIConstants.Focus.subduedOpacity) / 100) * Double(p))
+                    .blur(radius: subdued.blur * p)
+                    .opacity(1 - (1 - subdued.opacity) * p)
                     .offset(Self.base(for: page))
             }
         }
