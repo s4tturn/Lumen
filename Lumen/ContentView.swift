@@ -15,11 +15,8 @@ import SwiftUI
 /// Root orchestrator for Lumen. Manages the startup greeting sequence,
 /// layers all views in a ZStack, and coordinates cross-view focus changes.
 struct ContentView: View {
-    @State private var store = CompletionStore()
     @State private var greetingState: FocusedState = .hidden
     @State private var navigationState: FocusedState = .subduedAlt
-    @State private var pillState: FocusedState = .hidden
-    @State private var isCardExpanded = false
 
     var body: some View {
         ZStack {
@@ -27,38 +24,15 @@ struct ContentView: View {
             FocusContainer(state: navigationState) {
                 CoreNavigation()
             }
-            .environment(\.onCardExpand, handleCardExpand)
-            .environment(\.onFocusedItemChange, handleFocusedItemChange)
 
             FocusContainer(state: greetingState) {
                 GreetingView()
             }
 
-            FocusContainer(state: pillState, alignment: .bottom) {
-                CompletePill()
-                    .environment(store)
-            }
-            .padding(.bottom, 70)
-            .allowsHitTesting(isCardExpanded)
-
             AmbientPlayer()
         }
         .ignoresSafeArea()
         .task { await startupSequence() }
-    }
-
-    // MARK: - Environment Handlers
-
-    private func handleCardExpand(_ expanding: Bool) {
-        // The pill emerges as the card departs; both animate via their own
-        // FocusedState springs. `isCardExpanded` only gates the pill's
-        // hit-testing once the card is gone.
-        pillState = expanding ? .visible : .hidden
-        isCardExpanded = expanding
-    }
-
-    private func handleFocusedItemChange(_ item: FocusedItem?) {
-        store.setFocused(item)
     }
 
     // MARK: - Startup Sequence

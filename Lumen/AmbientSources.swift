@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AmbientSource: Identifiable {
+struct AmbientSource: Identifiable, Sendable {
     let id = UUID()
     let name: String
     let icon: String

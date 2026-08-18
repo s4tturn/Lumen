@@ -28,36 +28,6 @@ enum UIConstants {
         static let hiddenScale: CGFloat = 0.95
     }
 
-    enum Collections {
-        /// Angular distance between adjacent collection cards (degrees).
-        static let cardAngle: Double = 45
-        /// What fraction of card height the card occupies relative to screen width.
-        static let cardWidthRatio: CGFloat = 0.7
-        /// Spacing between card centers.
-        static let cardSpacingRatio: CGFloat = 0.2
-        /// Dead zone radius for disk drag (pts from center).
-        static let diskDeadZone: CGFloat = 100
-        /// Velocity threshold (°/s) for momentum-based disk snap.
-        static let diskMomentumThreshold: Double = 100
-        /// Minimum screen fraction drag to trigger item swipe.
-        static let itemSwipeThreshold: CGFloat = 0.2
-        /// Minimum velocity to trigger item swipe.
-        static let itemSwipeVelocity: CGFloat = 300
-        /// Minimum drag distance (pts) to dismiss expanded card.
-        static let dismissDistance: CGFloat = 80
-        /// Minimum drag velocity (pts/s) to dismiss expanded card.
-        static let dismissVelocity: CGFloat = 300
-        /// Distance at which dismiss progress reaches 100%.
-        static let dismissFullDistance: CGFloat = 150
-        /// Tick mark dimensions.
-        static let tickWidth: CGFloat = 7
-        static let tickHeight: CGFloat = 40
-        /// Number of visible cards on each side of center in carousel.
-        static let visibleCardRadius: Int = 2
-        /// Heavy blur applied to the collection photo behind the expanded card.
-        static let expandedBackgroundBlur: CGFloat = 30
-    }
-
     enum General {
         private static let screen: UIScreen = {
             (UIApplication.shared.connectedScenes.first as? UIWindowScene)!.screen
@@ -74,5 +44,22 @@ enum UIConstants {
         static let snap = SwiftUI.Animation.spring(response: 0.35, dampingFraction: 0.8)
         static let rubberbandReturn = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 1.0)
         static let reducedMotionFallback = SwiftUI.Animation.easeOut(duration: 0.2)
+    }
+
+    enum Collections {
+        static let cardAngle: Double = 60
+        static let visibleCardRadius: Int = 3
+        static let cardWidthRatio: CGFloat = 0.6
+        static let cardSpacingRatio: CGFloat = 0.3
+        static let expandedBackgroundBlur: CGFloat = 20
+        static let tickWidth: CGFloat = 10
+        static let tickHeight: CGFloat = 30
+        static let diskDeadZone: CGFloat = 40
+        static let diskMomentumThreshold: Double = 50
+        static let dismissFullDistance: CGFloat = 200
+        static let dismissDistance: CGFloat = 100
+        static let dismissVelocity: CGFloat = 500
+        static let itemSwipeThreshold: CGFloat = 0.3
+        static let itemSwipeVelocity: CGFloat = 800
     }
 }
