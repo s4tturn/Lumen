@@ -4,117 +4,121 @@ struct AmbientPlayer: View {
     @State private var engine = AmbientEngine()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // #EXPANDEDVIEW
-    // Original expanded glass band, kept as a reference while the compact
-    // player is rebuilt:
-    //
-    // var body: some View {
-    //     bandShape
-    //         .contentShape(bandShape)
-    //         .glassEffect(.regular.interactive(), in: bandShape)
-    //         .padding(UIConstants.General.safeSpace)
-    //         .ignoresSafeArea()
-    //         .frame(height: 240.0)
-    //         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    // }
-    //
-    // private var bandShape: RoundedRectangle {
-    //     RoundedRectangle(
-    //         cornerRadius: UIConstants.General.screenCornerRadius - UIConstants.General.safeSpace,
-    //         style: .continuous
-    //     )
-    // }
-    
-    // #PAUSEDVIEW
-    // Compact single-source circle button:
-    //
-    // var body: some View {
-    //     Button(action: {}) {
-    //         Image(systemName: "play.fill")
-    //             .font(.system(size: 22, weight: .medium))
-    //             .foregroundStyle(.white)
-    //         .frame(width: 50, height: 50)
-    //             .contentShape(Circle())
-    //             .glassEffect(.regular.interactive(), in: Circle())
-    //     }
-    //     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    //     .padding(.bottom, 34)
-    // }
-    
-    // #PLAYINGVIEW
-    // Dynamic pill wrapping its content, kept as a reference:
-    //
-    // var body: some View {
-    //     HStack(spacing: 0) {
-    //         RoundedRectangle(cornerRadius: 5, style: .continuous)
-    //             .fill(.white.opacity(0.25))
-    //             .frame(width: 30, height: 30)
-    //
-    //         Text("SourceText")
-    //             .font(.system(size: 15, weight: .semibold))
-    //             .foregroundStyle(.white)
-    //             .lineLimit(1)
-    //             .padding(.leading, 10)
-    //
-    //         Spacer(minLength: 0)
-    //
-    //         Image(systemName: "pause.fill")
-    //             .resizable()
-    //             .aspectRatio(contentMode: .fit)
-    //             .frame(maxWidth: 20, maxHeight: 20)
-    //             .foregroundStyle(.white)
-    //     }
-    //     .padding(.leading, 20)
-    //     .padding(.trailing, 20)
-    //     .frame(width: UIConstants.General.screenWidth * 0.5, height: 50)
-    //     .contentShape(Capsule())
-    //     .glassEffect(.regular.interactive(), in: Capsule())
-    //     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    //     .padding(.bottom, 34)
-    // }
-    
-    // #VOLUMEVIEW
-    // Draggable volume slider, kept as a reference:
-    //
-    // var body: some View {
-    //     ZStack {
-    //         GeometryReader { geo in
-    //             ZStack(alignment: .leading) {
-    //                 Capsule()
-    //                     .fill(Color.white.opacity(0.25))
-    //                 Capsule()
-    //                     .fill(Color.white)
-    //                     .frame(width: geo.size.width * progress)
-    //             }
-    //             .clipShape(Capsule())
-    //             .gesture(
-    //                 DragGesture(minimumDistance: 0)
-    //                     .onChanged { value in
-    //                         let newProgress = value.location.x / geo.size.width
-    //                         progress = min(max(newProgress, 0), 1)
-    //                     }
-    //             )
-    //         }
-    //         .padding(10)
-    //     }
-    //     .contentShape(Capsule())
-    //     .glassEffect(.regular.interactive(), in: Capsule())
-    //     .frame(width: UIConstants.General.screenWidth * 0.7, height: 44)
-    //     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    //     .padding(.bottom, 34)
-    // }
+    // MARK: - Reveal State
+
+    private enum Reveal {
+        case compact
+        case expanded
+        case volume
+    }
+
+    private enum DragAxis {
+        case horizontal
+        case vertical
+        case ignored
+    }
+
+    @State private var reveal: Reveal = .compact
+    @State private var dragAxis: DragAxis?
+    @State private var dragStart = CGSize.zero
+    @State private var startVolume: Float = 0
+    @State private var highlightedSourceID: AmbientSource.ID?
+    @State private var cardFrames: [AmbientSource.ID: CGRect] = [:]
+    @Namespace private var morphNamespace
+
+    private let haptic = UIImpactFeedbackGenerator(style: .light)
+
+    // MARK: - Constants
+
+    private static let lockThreshold: CGFloat = 10
+    private static let tapMaxMovement: CGFloat = 12
+    private static let expandedHeight: CGFloat = 218
+
+    // MARK: - Springs
+
+    private let engageSpring = Animation.snappy(duration: 0.45, extraBounce: 0.12)
+    private let collapseSpring = Animation.snappy(duration: 0.38, extraBounce: 0.06)
+
+    // MARK: - Shapes (cached — avoids repeated allocation)
+
+    private static let pillShape = RoundedRectangle(cornerRadius: 25, style: .continuous)
+    private static let bandShape = RoundedRectangle(
+        cornerRadius: UIConstants.General.screenCornerRadius - 10,
+        style: .continuous
+    )
+
+    // MARK: - Geometry
+
+    private var compactWidth: CGFloat {
+        engine.isPlaying ? UIConstants.General.screenWidth * 0.5 : 50
+    }
+
+    private var volumeWidth: CGFloat {
+        UIConstants.General.screenWidth * 0.7
+    }
+
+    private var currentSize: CGSize {
+        switch reveal {
+        case .compact:
+            CGSize(width: compactWidth, height: 50)
+        case .volume:
+            CGSize(width: volumeWidth, height: 44)
+        case .expanded:
+            CGSize(
+                width: UIConstants.General.screenWidth - 2 * UIConstants.General.safeSpace,
+                height: Self.expandedHeight
+            )
+        }
+    }
+
+    private var currentBottomPadding: CGFloat {
+        reveal == .expanded ? UIConstants.General.safeSpace : 34
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        playerButton
+        ZStack(alignment: .bottom) {
+            playerMorph
+            gestureSurface
+        }
+        .coordinateSpace(name: "AmbientPlayer")
+        .onPreferenceChange(SourceCardFrameKey.self) { cardFrames = $0 }
+    }
+
+    // MARK: - Player Morph
+
+    private var playerMorph: some View {
+        GlassEffectContainer(spacing: 12) {
+            ZStack {
+                if reveal == .expanded {
+                    expandedBand
+                } else if reveal == .volume {
+                    volumePill
+                } else {
+                    compactPill
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .padding(.bottom, 34)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 
-    private var glassShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 25, style: .continuous)
+    // MARK: - Gesture Surface
+
+    private var gestureSurface: some View {
+        Rectangle()
+            .fill(.clear)
+            .frame(width: currentSize.width, height: currentSize.height)
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+            .gesture(dragGesture)
+            .padding(.bottom, currentBottomPadding)
     }
 
-    private var playerButton: some View {
+    // MARK: - Compact Player
+
+    private var compactPill: some View {
         ZStack {
             HStack(spacing: 0) {
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
@@ -147,11 +151,12 @@ struct AmbientPlayer: View {
             Image(systemName: "play.fill")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(.white)
+                .frame(width: compactWidth, height: 50)
                 .opacity(engine.isPlaying ? 0 : 1)
         }
-        .frame(width: engine.isPlaying ? UIConstants.General.screenWidth * 0.5 : 50, height: 50)
-        .clipShape(glassShape)
-        .contentShape(glassShape)
+        .frame(width: compactWidth, height: 50)
+        .clipShape(Self.pillShape)
+        .contentShape(Self.pillShape)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(engine.isPlaying ? "Pause ambient sound" : "Play ambient sound")
         .accessibilityAddTraits(.isButton)
@@ -160,51 +165,169 @@ struct AmbientPlayer: View {
                 engine.togglePlayPause()
             }
         }
-        .onTapGesture {
-            withAnimation(reduceMotion ? nil : .default) {
-                engine.togglePlayPause()
+        .glassEffect(.clear.interactive(), in: Self.pillShape)
+        .glassEffectID("compact", in: morphNamespace)
+        .glassEffectTransition(.matchedGeometry)
+        .padding(.bottom, 34)
+    }
+
+    // MARK: - Volume
+
+    private var volumePill: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.25))
+                Capsule()
+                    .fill(Color.white)
+                    .frame(width: geo.size.width * CGFloat(engine.volume))
+            }
+            .clipShape(Capsule())
+        }
+        .padding(10)
+        .frame(width: volumeWidth, height: 44)
+        .contentShape(Capsule())
+        .glassEffect(.clear.interactive(), in: Capsule())
+        .glassEffectID("volume", in: morphNamespace)
+        .glassEffectTransition(.matchedGeometry)
+        .padding(.bottom, 34)
+    }
+
+    // MARK: - Expanded
+
+    private var expandedBand: some View {
+        let cardCornerRadius = UIConstants.General.screenCornerRadius - 26
+
+        return VStack(alignment: .center, spacing: 0) {
+            Text("Ambient Sources")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+
+            VStack(spacing: 6) {
+                ForEach(AmbientSource.all) { source in
+                    SourceCard(
+                        source: source,
+                        cornerRadius: cardCornerRadius,
+                        highlighted: highlightedSourceID == source.id
+                    )
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear
+                                .preference(
+                                    key: SourceCardFrameKey.self,
+                                    value: [source.id: geo.frame(in: .named("AmbientPlayer"))]
+                                )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+        .frame(
+            width: UIConstants.General.screenWidth - 2 * UIConstants.General.safeSpace,
+            height: Self.expandedHeight,
+            alignment: .top
+        )
+        .containerShape(Self.bandShape)
+        .contentShape(Self.bandShape)
+        .glassEffect(.clear.interactive(), in: Self.bandShape)
+        .glassEffectID("expanded", in: morphNamespace)
+        .glassEffectTransition(.matchedGeometry)
+        .padding(.bottom, UIConstants.General.safeSpace)
+    }
+
+    // MARK: - Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("AmbientPlayer"))
+            .onChanged { updateDrag($0) }
+            .onEnded { endDrag($0) }
+    }
+
+    private func updateDrag(_ value: DragGesture.Value) {
+        guard dragAxis != .ignored else { return }
+        let dx = abs(value.translation.width)
+        let dy = abs(value.translation.height)
+
+        if dragAxis == nil, max(dx, dy) > Self.lockThreshold {
+            if dx > dy {
+                dragAxis = .horizontal
+                dragStart = value.translation
+                startVolume = engine.volume
+                engage(.volume)
+            } else if dy > dx {
+                if value.translation.height < 0 {
+                    dragAxis = .vertical
+                    dragStart = value.translation
+                    engage(.expanded)
+                } else {
+                    dragAxis = .ignored
+                }
             }
         }
-        .glassEffect(.clear.interactive(), in: glassShape)
+
+        switch dragAxis {
+        case .horizontal:
+            updateVolume(from: value.translation.width)
+        case .vertical:
+            highlightSource(at: value.location)
+        default:
+            break
+        }
     }
-    
-    // #EXPANDEDVIEW
-    // Current expanded view with ambient sources list:
-    //
-    // var body: some View {
-    //     VStack(alignment: .center, spacing: 0) {
-    //         Text("Ambient Sources")
-    //             .font(.system(size: 20, weight: .semibold))
-    //             .foregroundStyle(.white)
-    //             .padding(.top, 20)
-    //             .padding(.bottom, 16)
-    //         
-    //         VStack(spacing: 6) {
-    //             ForEach(AmbientSource.all) { source in
-    //                 SourceCard(source: source, cornerRadius: sourceCardCornerRadius)
-    //             }
-    //         }
-    //         .padding(.horizontal, 12)
-    //         .padding(.bottom, 12)
-    //     }
-    //     .frame(maxWidth: .infinity, alignment: .top)
-    //     .containerShape(bandShape)
-    //     .contentShape(bandShape)
-    //     .glassEffect(.regular.interactive(), in: bandShape)
-    //     .padding(.horizontal, UIConstants.General.safeSpace)
-    //     .padding(.bottom, 12)
-    //     .ignoresSafeArea()
-    //     .frame(
-    //         maxWidth: .infinity,
-    //         maxHeight: .infinity,
-    //         alignment: .bottom
-    //     )
-    // }
-    
+
+    private func highlightSource(at point: CGPoint) {
+        highlightedSourceID = AmbientSource.all.first {
+            cardFrames[$0.id]?.contains(point) == true
+        }?.id
+    }
+
+    private func engage(_ target: Reveal) {
+        withAnimation(reduceMotion ? nil : engageSpring) { reveal = target }
+        haptic.prepare()
+        haptic.impactOccurred(intensity: 0.7)
+    }
+
+    private func updateVolume(from width: CGFloat) {
+        let delta = width - dragStart.width
+        let track = volumeWidth - 20
+        let adjusted = Double(startVolume) + Double(delta) / Double(track)
+        engine.volume = Float(min(max(adjusted, 0), 1))
+    }
+
+    private func endDrag(_ value: DragGesture.Value) {
+        if dragAxis == .vertical,
+           let id = highlightedSourceID,
+           let source = AmbientSource.all.first(where: { $0.id == id }) {
+            engine.select(source)
+        }
+
+        let engaged = dragAxis == .horizontal || dragAxis == .vertical
+
+        if !engaged {
+            let movement = max(abs(value.translation.width), abs(value.translation.height))
+            if movement < Self.tapMaxMovement {
+                withAnimation(reduceMotion ? nil : .default) {
+                    engine.togglePlayPause()
+                }
+            }
+        }
+
+        dragAxis = nil
+        highlightedSourceID = nil
+        withAnimation(reduceMotion ? nil : collapseSpring) { reveal = .compact }
+    }
+
+    // MARK: - Source Card
+
     private struct SourceCard: View {
         let source: AmbientSource
         let cornerRadius: CGFloat
-        
+        let highlighted: Bool
+
         var body: some View {
             HStack(spacing: 13) {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -215,13 +338,13 @@ struct AmbientPlayer: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
                     }
-                
+
                 Text(source.name)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
-                
+
                 Spacer(minLength: 8)
-                
+
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.white.opacity(0.9))
                     .frame(width: 20, height: 20)
@@ -231,19 +354,26 @@ struct AmbientPlayer: View {
             .frame(height: 70)
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
-                    .fill(.white.opacity(0.075))
+                    .fill(highlighted ? .white.opacity(0.16) : .white.opacity(0.075))
             }
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
+                    .stroke(.white.opacity(highlighted ? 0.5 : 0), lineWidth: 1.5)
+            )
+            .scaleEffect(highlighted ? 1.02 : 1)
+            .animation(.snappy(duration: 0.22, extraBounce: 0.18), value: highlighted)
         }
     }
-    
-    private var bandShape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: UIConstants.General.screenCornerRadius - 10,
-            style: .continuous
-        )
-    }
-    
-    private var sourceCardCornerRadius: CGFloat {
-        UIConstants.General.screenCornerRadius - 26
+
+    // MARK: - Frame Tracking
+
+    private struct SourceCardFrameKey: PreferenceKey {
+        static var defaultValue: [AmbientSource.ID: CGRect] { [:] }
+        static func reduce(
+            value: inout [AmbientSource.ID: CGRect],
+            nextValue: () -> [AmbientSource.ID: CGRect]
+        ) {
+            value.merge(nextValue(), uniquingKeysWith: { $1 })
+        }
     }
 }
