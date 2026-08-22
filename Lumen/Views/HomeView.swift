@@ -4,6 +4,7 @@ struct HomeView: View {
     @State private var isPressing = false
     @State private var pressStartTime: TimeInterval = 0
     @State private var releaseStartTime: TimeInterval = 0
+    @GestureState private var longPress = false
 
     // Growth uses Apple's `smooth` spring: critically damped, zero bounce.
     // A press carries no momentum, so per HIG ("Designing Fluid Interfaces",
@@ -22,47 +23,53 @@ struct HomeView: View {
     private static let maxScale: CGFloat = 1.5
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let time = timeline.date.timeIntervalSinceReferenceDate
-            let scale = animatedScale(at: time)
+        GeometryReader { geo in
+            let width = geo.size.width
+            let height = geo.size.height
 
-            Canvas(opaque: true, rendersAsynchronously: true) { context, size in
-                DotMatrixRenderer.draw(context: context, size: size, time: time, scale: scale)
+            TimelineView(.animation) { timeline in
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                let scale = animatedScale(at: time)
+
+                Canvas(opaque: true, rendersAsynchronously: true) { context, size in
+                    DotMatrixRenderer.draw(context: context, size: size, time: time, scale: scale)
+                }
             }
-        }
-        .onLongPressGesture(
-            minimumDuration: 0.15,
-            pressing: { pressing in
+            .gesture(
+                LongPressGesture(minimumDuration: 0.15)
+                    .updating($longPress) { _, state, _ in state = true }
+            )
+            .onChange(of: longPress) { _, pressing in
                 isPressing = pressing
                 if pressing {
                     pressStartTime = Date().timeIntervalSinceReferenceDate
                 } else {
                     releaseStartTime = Date().timeIntervalSinceReferenceDate
                 }
-            },
-            perform: {}
-        )
-        .background(Color.black)
-        .ignoresSafeArea()
-        .overlay(alignment: .top) {
-            RadialGradient(
-                colors: [.clear, .black],
-                center: .bottom,
-                startRadius: UIConstants.General.screenWidth * 0.25,
-                endRadius: UIConstants.General.screenWidth * 0.7
-            )
-            .frame(height: UIConstants.General.screenHeight * 0.35)
+            }
+            .accessibilityHint("Press and hold to activate")
+            .background(Color.black)
             .ignoresSafeArea()
-        }
-        .overlay(alignment: .bottom) {
-            RadialGradient(
-                colors: [.clear, .black],
-                center: .top,
-                startRadius: UIConstants.General.screenWidth * 0.25,
-                endRadius: UIConstants.General.screenWidth * 0.7
-            )
-            .frame(height: UIConstants.General.screenHeight * 0.35)
-            .ignoresSafeArea()
+            .overlay(alignment: .top) {
+                RadialGradient(
+                    colors: [.clear, .black],
+                    center: .bottom,
+                    startRadius: width * 0.25,
+                    endRadius: width * 0.7
+                )
+                .frame(height: height * 0.35)
+                .ignoresSafeArea()
+            }
+            .overlay(alignment: .bottom) {
+                RadialGradient(
+                    colors: [.clear, .black],
+                    center: .top,
+                    startRadius: width * 0.25,
+                    endRadius: width * 0.7
+                )
+                .frame(height: height * 0.35)
+                .ignoresSafeArea()
+            }
         }
     }
 
@@ -118,9 +125,15 @@ struct HomeView: View {
 private struct DotMatrixRenderer {
     /// Unit-circle offsets for every ring. Dot count and angular step are
     /// constant per ring, so this is computed exactly once, up front.
+    ///
+    /// The ring field is sized for the tallest window Lumen can occupy so the
+    /// cache stays valid as the app is resized on iPad / iPhone Mirroring in
+    /// iOS 27. The actual ring count drawn each frame is derived from the live
+    /// canvas `size` inside `draw`, not from this snapshot.
     static let ringOffsets: [[CGPoint]] = {
         let constants = UIConstants.DotMatrix.self
-        let maxRings = max(1, Int((UIConstants.General.screenHeight / 2 + 2 * constants.dotSpacing) / constants.dotSpacing))
+        let maxFieldHeight: CGFloat = 3000
+        let maxRings = max(1, Int((maxFieldHeight / 2 + 2 * constants.dotSpacing) / constants.dotSpacing))
         return (1...maxRings).map { ring in
             let count = 5 * ring
             let angleStep = 2.0 * .pi / CGFloat(count)

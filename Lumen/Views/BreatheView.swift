@@ -8,6 +8,8 @@ struct BreatheView: View {
                 .font(.system(size: 40, weight: .bold))
                 .foregroundColor(.white)
         }
+        .accessibilityLabel("Breathe")
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

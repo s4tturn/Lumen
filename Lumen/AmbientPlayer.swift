@@ -1,15 +1,20 @@
 import SwiftUI
 
 struct AmbientPlayer: View {
+    @Binding private var collectionsExpanded: Bool
     @State private var engine = AmbientEngine()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     // MARK: - Reveal State
 
     private enum Reveal {
-        case compact
+        case playing
+        case paused
         case expanded
         case volume
+        case complete
+        case completed
     }
 
     private enum DragAxis {
@@ -18,12 +23,13 @@ struct AmbientPlayer: View {
         case ignored
     }
 
-    @State private var reveal: Reveal = .compact
+    @State private var reveal: Reveal = .paused
     @State private var dragAxis: DragAxis?
     @State private var dragStart = CGSize.zero
     @State private var startVolume: Float = 0
     @State private var highlightedSourceID: AmbientSource.ID?
     @State private var cardFrames: [AmbientSource.ID: CGRect] = [:]
+    @State private var containerWidth: CGFloat = 0
     @Namespace private var morphNamespace
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
@@ -33,6 +39,9 @@ struct AmbientPlayer: View {
     private static let lockThreshold: CGFloat = 10
     private static let tapMaxMovement: CGFloat = 12
     private static let expandedHeight: CGFloat = 218
+    private static let completeWidth: CGFloat = 126
+    private static let completedWidth: CGFloat = 136
+    private static let trashDiameter: CGFloat = 50
 
     // MARK: - Springs
 
@@ -47,27 +56,35 @@ struct AmbientPlayer: View {
         style: .continuous
     )
 
+    init(collectionsExpanded: Binding<Bool> = .constant(false)) {
+        self._collectionsExpanded = collectionsExpanded
+    }
+
     // MARK: - Geometry
 
     private var compactWidth: CGFloat {
-        engine.isPlaying ? UIConstants.General.screenWidth * 0.5 : 50
+        engine.isPlaying ? containerWidth * 0.5 : 50
     }
 
     private var volumeWidth: CGFloat {
-        UIConstants.General.screenWidth * 0.7
+        containerWidth * 0.7
     }
 
     private var currentSize: CGSize {
         switch reveal {
-        case .compact:
+        case .playing, .paused:
             CGSize(width: compactWidth, height: 50)
         case .volume:
             CGSize(width: volumeWidth, height: 44)
         case .expanded:
             CGSize(
-                width: UIConstants.General.screenWidth - 2 * UIConstants.General.safeSpace,
+                width: containerWidth - 2 * UIConstants.General.safeSpace,
                 height: Self.expandedHeight
             )
+        case .complete:
+            CGSize(width: Self.completeWidth, height: 50)
+        case .completed:
+            CGSize(width: Self.trashDiameter + 8 + Self.completedWidth, height: 50)
         }
     }
 
@@ -75,15 +92,45 @@ struct AmbientPlayer: View {
         reveal == .expanded ? UIConstants.General.safeSpace : 34
     }
 
+    private var playbackGesturesEnabled: Bool {
+        !collectionsExpanded && reveal != .complete && reveal != .completed
+    }
+
+    private var playbackReveal: Reveal {
+        engine.isPlaying ? .playing : .paused
+    }
+
     // MARK: - Body
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            playerMorph
-            gestureSurface
+        GeometryReader { geo in
+            ZStack(alignment: .bottom) {
+                playerMorph
+                gestureSurface
+            }
+            .coordinateSpace(name: "AmbientPlayer")
+            .onPreferenceChange(SourceCardFrameKey.self) { cardFrames = $0 }
+            .onChange(of: collectionsExpanded) { _, isExpanded in
+                withAnimation(reduceMotion ? nil : engageSpring) {
+                    reveal = isExpanded ? .complete : playbackReveal
+                }
+            }
+            .task(id: revealIsCompleted) {
+                guard reveal == .completed else { return }
+
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+
+                withAnimation(reduceMotion ? nil : collapseSpring) {
+                    reveal = .complete
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
         }
-        .coordinateSpace(name: "AmbientPlayer")
-        .onPreferenceChange(SourceCardFrameKey.self) { cardFrames = $0 }
+    }
+
+    private var revealIsCompleted: Bool {
+        reveal == .completed
     }
 
     // MARK: - Player Morph
@@ -95,6 +142,10 @@ struct AmbientPlayer: View {
                     expandedBand
                 } else if reveal == .volume {
                     volumePill
+                } else if reveal == .complete {
+                    completePill
+                } else if reveal == .completed {
+                    completedControls
                 } else {
                     compactPill
                 }
@@ -109,10 +160,16 @@ struct AmbientPlayer: View {
     private var gestureSurface: some View {
         Rectangle()
             .fill(.clear)
-            .frame(width: currentSize.width, height: currentSize.height)
+            // Keep the recognizer's hit-test geometry stable while the visible
+            // player morphs. A changing gesture view can be removed from under
+            // the finger, preventing DragGesture.onEnded from being delivered.
+            .frame(width: compactWidth, height: 50)
             .contentShape(Rectangle())
             .accessibilityHidden(true)
-            .gesture(dragGesture)
+            .allowsHitTesting(playbackGesturesEnabled)
+            .if(playbackGesturesEnabled) { view in
+                view.gesture(dragGesture)
+            }
             .padding(.bottom, currentBottomPadding)
     }
 
@@ -165,8 +222,11 @@ struct AmbientPlayer: View {
                 engine.togglePlayPause()
             }
         }
-        .glassEffect(.clear.interactive(), in: Self.pillShape)
-        .glassEffectID("compact", in: morphNamespace)
+        .accessibleGlass(.clear.interactive(), in: Self.pillShape, reduceTransparency: reduceTransparency)
+        .glassEffectID(
+            reveal == .playing ? "playing" : "paused",
+            in: morphNamespace
+        )
         .glassEffectTransition(.matchedGeometry)
         .padding(.bottom, 34)
     }
@@ -187,9 +247,73 @@ struct AmbientPlayer: View {
         .padding(10)
         .frame(width: volumeWidth, height: 44)
         .contentShape(Capsule())
-        .glassEffect(.clear.interactive(), in: Capsule())
+        .accessibleGlass(.clear.interactive(), in: Capsule(), reduceTransparency: reduceTransparency)
         .glassEffectID("volume", in: morphNamespace)
         .glassEffectTransition(.matchedGeometry)
+        .padding(.bottom, 34)
+    }
+
+    // MARK: - Completion
+
+    private var completePill: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : engageSpring) {
+                reveal = .completed
+            }
+            haptic.impactOccurred(intensity: 0.7)
+        } label: {
+            Text("Complete")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Self.completeWidth, height: 50)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Self.pillShape)
+        .accessibilityLabel("Complete")
+        .accessibilityAddTraits(.isButton)
+        .accessibleGlass(.clear.interactive(), in: Self.pillShape, reduceTransparency: reduceTransparency)
+        .glassEffectID("complete", in: morphNamespace)
+        .glassEffectTransition(.matchedGeometry)
+        .padding(.bottom, 34)
+    }
+
+    private var completedControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(reduceMotion ? nil : collapseSpring) {
+                    reveal = .complete
+                }
+                haptic.impactOccurred(intensity: 0.7)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .frame(width: Self.trashDiameter, height: Self.trashDiameter)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .accessibilityLabel("Undo completion")
+            .accessibilityAddTraits(.isButton)
+            .accessibleGlass(
+                .clear.tint(.red.opacity(0.35)).interactive(),
+                in: Circle(),
+                reduceTransparency: reduceTransparency
+            )
+            .glassEffectID("completionTrash", in: morphNamespace)
+            .glassEffectTransition(.matchedGeometry)
+
+            Text("Completed")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Self.completedWidth, height: 50)
+                .contentShape(Self.pillShape)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Completed")
+                .accessibleGlass(.clear.interactive(), in: Self.pillShape, reduceTransparency: reduceTransparency)
+                .glassEffectID("completed", in: morphNamespace)
+                .glassEffectTransition(.matchedGeometry)
+        }
+        .frame(width: currentSize.width, height: 50)
         .padding(.bottom, 34)
     }
 
@@ -227,13 +351,13 @@ struct AmbientPlayer: View {
             .padding(.bottom, 12)
         }
         .frame(
-            width: UIConstants.General.screenWidth - 2 * UIConstants.General.safeSpace,
+            width: containerWidth - 2 * UIConstants.General.safeSpace,
             height: Self.expandedHeight,
             alignment: .top
         )
         .containerShape(Self.bandShape)
         .contentShape(Self.bandShape)
-        .glassEffect(.clear.interactive(), in: Self.bandShape)
+        .accessibleGlass(.clear.interactive(), in: Self.bandShape, reduceTransparency: reduceTransparency)
         .glassEffectID("expanded", in: morphNamespace)
         .glassEffectTransition(.matchedGeometry)
         .padding(.bottom, UIConstants.General.safeSpace)
@@ -318,7 +442,9 @@ struct AmbientPlayer: View {
 
         dragAxis = nil
         highlightedSourceID = nil
-        withAnimation(reduceMotion ? nil : collapseSpring) { reveal = .compact }
+        withAnimation(reduceMotion ? nil : collapseSpring) {
+            reveal = playbackReveal
+        }
     }
 
     // MARK: - Source Card
@@ -374,6 +500,35 @@ struct AmbientPlayer: View {
             nextValue: () -> [AmbientSource.ID: CGRect]
         ) {
             value.merge(nextValue(), uniquingKeysWith: { $1 })
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func `if`<Content: View>(
+        _ condition: Bool,
+        transform: (Self) -> Content
+    ) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func accessibleGlass(
+        _ glass: Glass,
+        in shape: some Shape,
+        reduceTransparency: Bool
+    ) -> some View {
+        if reduceTransparency {
+            self.background(.ultraThinMaterial, in: shape)
+        } else {
+            self.glassEffect(glass, in: shape)
         }
     }
 }
