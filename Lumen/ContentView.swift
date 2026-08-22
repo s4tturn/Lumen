@@ -17,20 +17,23 @@ import SwiftUI
 struct ContentView: View {
     @State private var greetingState: FocusedState = .hidden
     @State private var navigationState: FocusedState = .subduedAlt
+    @State private var collectionsExpanded = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             FocusContainer(state: navigationState) {
-                CoreNavigation()
+                CoreNavigation(collectionsExpanded: $collectionsExpanded)
             }
 
             FocusContainer(state: greetingState) {
                 GreetingView()
             }
 
-            AmbientPlayer()
+            AmbientPlayer(collectionsExpanded: $collectionsExpanded)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Lumen")
         .ignoresSafeArea()
         .task { await startupSequence() }
     }

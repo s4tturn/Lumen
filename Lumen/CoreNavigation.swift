@@ -196,22 +196,20 @@ final class NavigationController {
 /// The main navigation view with a 2×2 grid of pages and drag navigation.
 struct CoreNavigation: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding private var collectionsExpanded: Bool
     @State private var controller = NavigationController()
-    @State private var layout: NavigationLayout?
+
+    init(collectionsExpanded: Binding<Bool> = .constant(false)) {
+        self._collectionsExpanded = collectionsExpanded
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let currentLayout = layout ?? NavigationLayout(proxy: proxy)
+            let currentLayout = NavigationLayout(proxy: proxy)
 
             navigationContent(layout: currentLayout)
                 .gesture(dragGesture(layout: currentLayout))
-                .onAppear {
-                    if layout == nil {
-                        layout = currentLayout
-                    }
-                }
         }
-        .ignoresSafeArea()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Main navigation")
         .accessibilityHint("Drag to navigate between pages")
@@ -239,8 +237,10 @@ struct CoreNavigation: View {
         let distance = sqrt(offsetX * offsetX + offsetY * offsetY)
         let progress = min(distance / layout.stepX, 1.0)
 
-        pageContent(page)
-            .frame(width: layout.pageWidth, height: layout.pageHeight)
+        let pageSize = CGSize(width: layout.pageWidth, height: layout.pageHeight)
+
+        pageContent(page, pageSize: pageSize)
+            .frame(width: pageSize.width, height: pageSize.height)
             .clipShape(ContainerRelativeShape())
             .scaleEffect(effectiveScale(progress: progress))
             .blur(radius: effectiveBlur(progress: progress))
@@ -254,7 +254,7 @@ struct CoreNavigation: View {
     }
 
     @ViewBuilder
-    private func pageContent(_ page: LumenPage) -> some View {
+    private func pageContent(_ page: LumenPage, pageSize: CGSize) -> some View {
         switch page {
         case .page1:
             MemoryView()
@@ -263,7 +263,7 @@ struct CoreNavigation: View {
         case .page3:
             BreatheView()
         case .page4:
-            CollectionsView()
+            CollectionsView(collectionsExpanded: $collectionsExpanded, pageSize: pageSize)
         }
     }
 

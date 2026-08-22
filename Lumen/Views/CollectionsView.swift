@@ -10,157 +10,127 @@ struct CollectionItem: Identifiable, Equatable {
     let task: String
 }
 
-struct Collection: Identifiable {
-    let id = UUID()
-    let name: String
-    let color: Color
-    let backgroundImage: String
-    let items: [CollectionItem]
-}
-
-// MARK: - Sample Data
-
-private let sampleCollections: [Collection] = [
-    Collection(
-        name: "Desk",
-        color: .orange,
-        backgroundImage: "DeskBackground",
-        items: [
-            CollectionItem(
-                emoji: "🗂️",
-                name: "Inbox",
-                task: "Clear the loose papers from your desk"
-            )
-        ]
-    ),
-
-    Collection(
-        name: "Kitchen",
-        color: .blue,
-        backgroundImage: "KitchenBackground",
-        items: [
-            CollectionItem(
-                emoji: "🧽",
-                name: "Sponge",
-                task: "Wash the dishes"
-            )
-        ]
-    ),
-
-    Collection(
-        name: "Garden",
-        color: .green,
-        backgroundImage: "GardenBackground",
-        items: [
-            CollectionItem(
-                emoji: "💧",
-                name: "Water",
-                task: "Water the thirsty plants"
-            )
-        ]
-    ),
-
-    Collection(
-        name: "Compassion",
-        color: .red,
-        backgroundImage: "CompassionBackground",
-        items: [
-            CollectionItem(
-                emoji: "🐾",
-                name: "Paws",
-                task: "Take a dog for a walk"
-            )
-        ]
-    ),
-
-    Collection(
-        name: "Connection",
-        color: .purple,
-        backgroundImage: "ConnectionBackground",
-        items: [
-            CollectionItem(
-                emoji: "📞",
-                name: "Call",
-                task: "Call a friend you've been missing"
-            )
-        ]
-    )
-]
-
 // MARK: - Card Configuration
 
 private struct Card: Identifiable {
     let id = UUID()
     let imageName: String
     let name: String
+    let items: [CollectionItem]
 }
 
 private let cards: [Card] = [
-    Card(imageName: "SelfBackground", name: "Self"),
-    Card(imageName: "SpaceBackground", name: "Space"),
-    Card(imageName: "KitchenBackground", name: "Kitchen"),
-    Card(imageName: "ConnectionBackground", name: "Connection"),
-    Card(imageName: "GrowthBackground", name: "Growth"),
-    Card(imageName: "JoyBackground", name: "Joy")
+    Card(
+        imageName: "SelfBackground",
+        name: "Self",
+        items: [
+            CollectionItem(emoji: "🚶‍♂️", name: "Walk", task: "Take a 10-minute walk somewhere pleasant"),
+            CollectionItem(emoji: "🧘‍♀️", name: "Stretch", task: "Do a full-body stretch while listening to one song"),
+            CollectionItem(emoji: "🧥", name: "Clothes", task: "Take a shower and put on clothes you feel good in"),
+            CollectionItem(emoji: "💧", name: "Water", task: "Drink a big glass of water"),
+            CollectionItem(emoji: "✨", name: "Ritual", task: "Do one small grooming ritual you've been neglecting")
+        ]
+    ),
+    Card(
+        imageName: "SpaceBackground",
+        name: "Space",
+        items: [
+            CollectionItem(emoji: "🧽", name: "Surface", task: "Clear one surface completely"),
+            CollectionItem(emoji: "🧺", name: "Belongings", task: "Put 10 things back where they belong"),
+            CollectionItem(emoji: "🛏️", name: "Bed", task: "Make your bed properly"),
+            CollectionItem(emoji: "🌬️", name: "Windows", task: "Open the windows and freshen the room"),
+            CollectionItem(emoji: "🕯️", name: "Beauty", task: "Make one small area feel beautiful")
+        ]
+    ),
+    Card(
+        imageName: "KitchenBackground",
+        name: "Kitchen",
+        items: [
+            CollectionItem(emoji: "🥞", name: "Breakfast", task: "Make your favorite breakfast"),
+            CollectionItem(emoji: "🥗", name: "Snack", task: "Create a snack from whatever you already have"),
+            CollectionItem(emoji: "🍳", name: "Recipe", task: "Cook something you've never made before"),
+            CollectionItem(emoji: "☕", name: "Drink", task: "Make yourself a really good drink"),
+            CollectionItem(emoji: "🍲", name: "Memory", task: "Recreate a dish you love from memory")
+        ]
+    ),
+    Card(
+        imageName: "ConnectionBackground",
+        name: "Connection",
+        items: [
+            CollectionItem(emoji: "📸", name: "Photo", task: "Send someone a photo that made you think of them"),
+            CollectionItem(emoji: "💬", name: "Appreciation", task: "Tell someone something you genuinely appreciate about them"),
+            CollectionItem(emoji: "📞", name: "Call", task: "Call someone you haven't spoken to in a while"),
+            CollectionItem(emoji: "🎁", name: "Favor", task: "Do a small unexpected favor for someone"),
+            CollectionItem(emoji: "⏳", name: "Presence", task: "Spend 15 minutes with someone without your phone")
+        ]
+    ),
+    Card(
+        imageName: "GrowthBackground",
+        name: "Growth",
+        items: [
+            CollectionItem(emoji: "📖", name: "Reading", task: "Read 5 pages of something you're interested in"),
+            CollectionItem(emoji: "💡", name: "Learning", task: "Learn one interesting thing and tell someone about it"),
+            CollectionItem(emoji: "🎯", name: "Practice", task: "Practice a skill for 10 minutes"),
+            CollectionItem(emoji: "✍️", name: "Idea", task: "Write down one idea you've been sitting on"),
+            CollectionItem(emoji: "🛠️", name: "Making", task: "Spend 10 minutes making something you've been putting off")
+        ]
+    ),
+    Card(
+        imageName: "JoyBackground",
+        name: "Joy",
+        items: [
+            CollectionItem(emoji: "🎧", name: "Music", task: "Listen to a favorite song with your eyes closed"),
+            CollectionItem(emoji: "🎨", name: "Hobby", task: "Spend 15 minutes on a hobby you haven't touched recently"),
+            CollectionItem(emoji: "🌸", name: "Beauty", task: "Go outside and find something beautiful"),
+            CollectionItem(emoji: "🤪", name: "Silly", task: "Do something purely silly"),
+            CollectionItem(emoji: "😂", name: "Laughter", task: "Rewatch a scene that always makes you laugh")
+        ]
+    )
 ]
+
+// MARK: - Geometry
+
+private struct CollectionsGeometry {
+    let size: CGSize
+
+    var diskRadius: CGFloat { size.height * Layout.diskRadiusRatio }
+    var diskDiameter: CGFloat { diskRadius * 2 }
+    var cardSize: CGFloat { diskDiameter * Layout.cardSizeRatio }
+    var orbitPadding: CGFloat { diskRadius * Layout.orbitPaddingRatio }
+    var orbitRadius: CGFloat { diskRadius + orbitPadding + cardSize / 2 }
+    var diskCenter: CGPoint { CGPoint(x: size.width / 2, y: size.height) }
+    var diskDeadZone: CGFloat { diskRadius * Layout.deadZoneRatio }
+    var dismissThreshold: CGFloat { cardSize * 0.15 }
+    var collapsedCornerRadius: CGFloat { cardSize * Layout.collapsedCornerRatio }
+    var tickHeight: CGFloat { diskRadius * Layout.tickHeightRatio }
+    var tickWidth: CGFloat { diskRadius * Layout.tickWidthRatio }
+    var screenCornerRadius: CGFloat { UIConstants.General.screenCornerRadius }
+}
 
 // MARK: - Constants
 
 private enum Layout {
     static let cardCount = cards.count
 
-    // Distance between actual cards.
     static let cardSpacing: Double = 360.0 / Double(cardCount)
-
-    // Tick marks can have their own spacing.
     static let tickSpacing: Double = UIConstants.Collections.cardAngle
 
-    static let diskDiameterRatio: CGFloat = 1.5
-    static let squareSizeRatio: CGFloat = 0.7
-    static let orbitPadding: CGFloat = 50
+    static let diskRadiusRatio: CGFloat = 0.35
+    static let cardSizeRatio: CGFloat = 0.5
+    static let orbitPaddingRatio: CGFloat = 0.20
+    static let deadZoneRatio: CGFloat = 0.06
+    static let collapsedCornerRatio: CGFloat = 0.15
+    static let tickHeightRatio: CGFloat = 0.15
+    static let tickWidthRatio: CGFloat = 0.03
 
-    static let tickWidth: CGFloat = UIConstants.Collections.tickWidth
-    static let tickHeight: CGFloat = UIConstants.Collections.tickHeight
-
-    static let collapsedCornerRadius: CGFloat = 60
-    static let dismissThreshold: CGFloat = 100
-
-    static let expandAnimation: Animation = .spring(
-        Spring.smooth(
-            duration: 0.5,
-            extraBounce: 0
-        )
-    )
-
-    // A swipe carries momentum, so per the HIG fluid-interface guidance
-    // ("Designing Fluid Interfaces", WWDC18) we let the dismiss follow
-    // through with a little bounce as the card springs back into its slot
-    // on the turntable, mirroring the path it expanded along.
-    static let dismissAnimation: Animation = .spring(
-        Spring.snappy(
-            duration: 0.45,
-            extraBounce: 0
-        )
-    )
-
-    // Releasing below the threshold rubber-bands back to the expanded state
-    // with no overshoot; a tap carries no momentum, so it must not bounce.
-    static let snapBackAnimation: Animation = .spring(
-        Spring.smooth(
-            duration: 0.4,
-            extraBounce: 0
-        )
-    )
+    static let expandAnimation: Animation = .spring(.smooth(duration: 0.5))
+    static let dismissAnimation: Animation = .spring(.snappy(duration: 0.45))
+    static let snapBackAnimation: Animation = .spring(.smooth(duration: 0.4))
+    static let snapSpring: Spring = .smooth(duration: 0.55)
 
     static let dismissVelocity: CGFloat = 800
-
-    static let snapSpring = Spring.smooth(
-        duration: 0.55,
-        extraBounce: 0
-    )
+    static let carouselFlickVelocity: CGFloat = 700
 }
-
-// MARK: - Coordinate Space
 
 private enum CoordinateSpaces {
     static let collections = "CollectionsView"
@@ -176,29 +146,14 @@ private func radians(fromDegrees degrees: Double) -> Double {
     degrees * .pi / 180.0
 }
 
-/// Returns an angle in degrees in the range (-180, 180].
-private func normalizedAngleDelta(
-    from start: Double,
-    to end: Double
-) -> Double {
+private func normalizedAngleDelta(from start: Double, to end: Double) -> Double {
     var delta = end - start
-
-    while delta > 180 {
-        delta -= 360
-    }
-
-    while delta < -180 {
-        delta += 360
-    }
-
+    while delta > 180 { delta -= 360 }
+    while delta < -180 { delta += 360 }
     return delta
 }
 
-/// Returns the polar angle of a point around a center.
-private func angle(
-    of point: CGPoint,
-    around center: CGPoint
-) -> Double {
+private func angle(of point: CGPoint, around center: CGPoint) -> Double {
     degrees(
         fromRadians: atan2(
             point.y - center.y,
@@ -209,10 +164,6 @@ private func angle(
 
 // MARK: - Ghost Card Assets
 
-/// Downsampled, extremely low-resolution copies of the card art. These are
-/// pre-rendered once per asset and stretched to the card's full frame with
-/// nearest-neighbor sampling so the ghost layer stays cheap to draw while
-/// tracking the real card exactly.
 private var lowResImageCache: [String: UIImage] = [:]
 
 private func lowResImage(for name: String) -> Image {
@@ -238,12 +189,7 @@ private func lowResImage(for name: String) -> Image {
 
     let small = UIGraphicsImageRenderer(size: target)
         .image { _ in
-            source.draw(
-                in: CGRect(
-                    origin: .zero,
-                    size: target
-                )
-            )
+            source.draw(in: CGRect(origin: .zero, size: target))
         }
 
     lowResImageCache[name] = small
@@ -252,13 +198,9 @@ private func lowResImage(for name: String) -> Image {
 
 // MARK: - Shared Card Layout
 
-/// Single source of truth for a card's geometry. Both the visible card and
-/// its invisible low-resolution ghost are derived from this so the two can
-/// never be displaced from one another.
 private struct CardLayout {
     let position: CGPoint
-    let width: CGFloat
-    let height: CGFloat
+    let size: CGSize
     let offsetY: CGFloat
     let cornerRadius: CGFloat
 }
@@ -268,30 +210,131 @@ private struct CardLayout {
 private struct TickMarksView: View {
     let rotation: Double
     let radius: CGFloat
+    let tickWidth: CGFloat
+    let tickHeight: CGFloat
+
+    private let count = Int(360.0 / Layout.tickSpacing)
 
     var body: some View {
         ZStack {
-            ForEach(
-                0..<Int(360.0 / Layout.tickSpacing),
-                id: \.self
-            ) { index in
+            ForEach(0..<count, id: \.self) { index in
                 Capsule(style: .continuous)
                     .fill(.white)
-                    .frame(
-                        width: Layout.tickWidth,
-                        height: Layout.tickHeight
-                    )
-                    .offset(
-                        y: -radius + Layout.tickHeight + 2
-                    )
-                    .rotationEffect(
-                        .degrees(
-                            Double(index) * Layout.tickSpacing
-                        )
-                    )
+                    .frame(width: tickWidth, height: tickHeight)
+                    .offset(y: -radius + tickHeight + 2)
+                    .rotationEffect(.degrees(Double(index) * Layout.tickSpacing))
             }
         }
         .rotationEffect(.degrees(rotation))
+    }
+}
+
+// MARK: - Expanded Collection Content
+
+private struct InfiniteEmojiCarousel: View {
+    let items: [CollectionItem]
+
+    @State private var pageIndex = 0
+    @State private var pageOffset: CGFloat = 0
+    @State private var isSettling = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+
+            HStack(spacing: 0) {
+                ForEach(-1...1, id: \.self) { relativeIndex in
+                    let item = items[wrapped(relativeIndex + pageIndex)]
+
+                    VStack(spacing: 18) {
+                        Text(item.emoji)
+                            .font(.system(size: min(width * 0.34, 150)))
+                            .minimumScaleFactor(0.65)
+
+                        Text(item.task)
+                            .font(.system(.title2, design: .serif))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                            .minimumScaleFactor(0.75)
+                            .padding(.horizontal, 28)
+                    }
+                    .frame(width: width, height: geometry.size.height)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Object \(item.emoji), task \(item.task)")
+                }
+            }
+            .offset(x: -width + pageOffset)
+            .contentShape(Rectangle())
+            .clipped()
+            .gesture(carouselGesture(width: width))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func wrapped(_ index: Int) -> Int {
+        let n = items.count
+        return ((index % n) + n) % n
+    }
+
+    private func carouselGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                guard !isSettling else { return }
+
+                guard abs(value.translation.width) > abs(value.translation.height) else {
+                    pageOffset = 0
+                    return
+                }
+
+                pageOffset = value.translation.width
+            }
+            .onEnded { value in
+                guard !isSettling else { return }
+
+                let horizontal = value.translation.width
+                guard abs(horizontal) > abs(value.translation.height) else {
+                    settleBack()
+                    return
+                }
+
+                let predicted = value.predictedEndTranslation.width
+                let fastFlick = abs(value.velocity.width) >= Layout.carouselFlickVelocity
+
+                let shouldAdvance =
+                    abs(horizontal) > width * 0.2
+                    || abs(predicted) > width * 0.25
+                    || fastFlick
+
+                guard shouldAdvance else {
+                    settleBack()
+                    return
+                }
+
+                let signal = fastFlick
+                    ? value.velocity.width
+                    : abs(predicted) > abs(horizontal) ? predicted : horizontal
+                let direction = signal < 0 ? 1 : -1
+
+                isSettling = true
+                withAnimation(.snappy(duration: 0.35)) {
+                    pageOffset = (direction == 1 ? -2 * width : 0) + width
+                } completion: {
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        pageIndex += direction
+                        pageOffset = 0
+                        isSettling = false
+                    }
+                }
+            }
+    }
+
+    private func settleBack() {
+        withAnimation(.smooth(duration: 0.28)) {
+            pageOffset = 0
+        }
     }
 }
 
@@ -299,225 +342,126 @@ private struct TickMarksView: View {
 
 struct CollectionsView: View {
 
+    @Binding private var collectionsExpanded: Bool
     @State private var expandedIndex: Int?
 
-    // This is the single source of truth for turntable rotation.
-    @State private var rotation: Double = 0
+    private let pageSize: CGSize
 
-    // Gesture state.
+    init(
+        collectionsExpanded: Binding<Bool> = .constant(false),
+        pageSize: CGSize = CGSize(width: 390, height: 844)
+    ) {
+        self._collectionsExpanded = collectionsExpanded
+        self.pageSize = pageSize
+    }
+
+    @State private var rotation: Double = 0
     @State private var isDraggingDisk = false
     @State private var lastFingerAngle: Double = 0
-
-    // Discrete haptic trigger.
     @State private var hapticTrigger = 0
     @State private var lastHapticRidge = 0
-
-    // Live, finger-following upward drag of the expanded card. Kept as
-    // @State (not @GestureState) so we can animate it back to rest on
-    // release instead of letting it snap, which was the source of the
-    // janky dismissal.
     @State private var dismissDrag: CGFloat = 0
+    @State private var dismissAxisLocked = false
 
     var body: some View {
-        GeometryReader { geometry in
-            let size = geometry.size
+        let geometry = CollectionsGeometry(size: pageSize)
+        let anyExpanded = expandedIndex != nil
 
-            let squareSize =
-                min(size.width, size.height)
-                * Layout.squareSizeRatio
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
 
-            let screenCornerRadius =
-                UIConstants.General.screenCornerRadius
-
-            let diskDiameter =
-                size.width * Layout.diskDiameterRatio
-
-            let diskRadius =
-                diskDiameter / 2
-
-            let diskCenter = CGPoint(
-                x: size.width / 2,
-                y: size.height
-            )
-
-            let orbitRadius =
-                diskRadius
-                + Layout.orbitPadding
-                + squareSize / 2
-
-            let anyExpanded =
-                expandedIndex != nil
-
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-
-                // Ghost layer (bottom): invisible, low-resolution cards that
-                // track the real cards exactly.
-                ForEach(
-                    Array(cards.enumerated()),
-                    id: \.element.id
-                ) { index, card in
-
-                    ghostCardView(
-                        card: card,
-                        index: index,
-                        size: size,
-                        squareSize: squareSize,
-                        diskCenter: diskCenter,
-                        orbitRadius: orbitRadius,
-                        screenCornerRadius: screenCornerRadius,
-                        isExpanded: expandedIndex == index
-                    )
-                }
-
-                // Turntable (middle).
-                diskView(
-                    radius: diskRadius,
-                    center: diskCenter
-                )
+            diskView(geometry: geometry)
                 .allowsHitTesting(!anyExpanded)
 
-                // Real cards (top).
-                ForEach(
-                    Array(cards.enumerated()),
-                    id: \.element.id
-                ) { index, card in
+            ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                let isExpanded = expandedIndex == index
 
-                    cardView(
-                        card: card,
-                        index: index,
-                        size: size,
-                        squareSize: squareSize,
-                        diskCenter: diskCenter,
-                        orbitRadius: orbitRadius,
-                        screenCornerRadius: screenCornerRadius,
-                        isExpanded: expandedIndex == index,
-                        anyExpanded: anyExpanded
-                    )
-                }
+                ghostCardView(
+                    card: card,
+                    index: index,
+                    geometry: geometry,
+                    isExpanded: isExpanded
+                )
+
+                cardView(
+                    card: card,
+                    index: index,
+                    geometry: geometry,
+                    isExpanded: isExpanded,
+                    anyExpanded: anyExpanded
+                )
             }
-            .coordinateSpace(
-                .named(CoordinateSpaces.collections)
-            )
         }
+        .frame(width: pageSize.width, height: pageSize.height)
+        .coordinateSpace(.named(CoordinateSpaces.collections))
         .ignoresSafeArea()
-
-        .sensoryFeedback(
-            .selection,
-            trigger: hapticTrigger
-        )
-
+        .sensoryFeedback(.selection, trigger: hapticTrigger)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Collections")
-        .accessibilityHint(
-            "Rotate the disk to browse collections, tap a card to open it"
-        )
+        .accessibilityHint("Rotate the disk to browse collections, tap a card to open it")
     }
 
     // MARK: - Disk
 
     @ViewBuilder
-    private func diskView(
-        radius: CGFloat,
-        center: CGPoint
-    ) -> some View {
-
+    private func diskView(geometry: CollectionsGeometry) -> some View {
         ZStack {
             Circle()
                 .fill(.black.opacity(0.6))
 
             TickMarksView(
                 rotation: rotation,
-                radius: radius
+                radius: geometry.diskRadius,
+                tickWidth: geometry.tickWidth,
+                tickHeight: geometry.tickHeight
             )
         }
-        .frame(
-            width: radius * 2,
-            height: radius * 2
-        )
+        .frame(width: geometry.diskDiameter, height: geometry.diskDiameter)
         .clipShape(Circle())
         .glassEffect(.regular, in: Circle())
-        .position(center)
+        .position(geometry.diskCenter)
         .geometryGroup()
-        .gesture(
-            diskDragGesture(center: center)
-        )
+        .gesture(diskDragGesture(center: geometry.diskCenter, geometry: geometry))
     }
 
-    // MARK: - Card
+    // MARK: - Card Layout
 
     private func cardLayout(
         index: Int,
         isExpanded: Bool,
-        size: CGSize,
-        squareSize: CGFloat,
-        diskCenter: CGPoint,
-        orbitRadius: CGFloat,
-        screenCornerRadius: CGFloat
+        geometry: CollectionsGeometry
     ) -> CardLayout {
-
         let angle = radians(
-            fromDegrees:
-                rotation
-                + Double(index) * Layout.cardSpacing
+            fromDegrees: rotation + Double(index) * Layout.cardSpacing
         )
 
-        let orbitX =
-            diskCenter.x
-            + orbitRadius * sin(angle)
+        let position = CGPoint(
+            x: isExpanded
+                ? geometry.size.width / 2
+                : geometry.diskCenter.x + geometry.orbitRadius * sin(angle),
+            y: isExpanded
+                ? geometry.size.height / 2
+                : geometry.diskCenter.y - geometry.orbitRadius * cos(angle)
+        )
 
-        let orbitY =
-            diskCenter.y
-            - orbitRadius * cos(angle)
+        let size = CGSize(
+            width: isExpanded ? geometry.size.width : geometry.cardSize,
+            height: isExpanded ? geometry.size.height : geometry.cardSize
+        )
 
-        let positionX =
-            isExpanded
-            ? size.width / 2
-            : orbitX
-
-        let positionY =
-            isExpanded
-            ? size.height / 2
-            : orbitY
-
-        let width =
-            isExpanded
-            ? size.width
-            : squareSize
-
-        let height =
-            isExpanded
-            ? size.height
-            : squareSize
-
-        let progress =
-            isExpanded
-            ? min(
-                max(
-                    -dismissDrag / Layout.dismissThreshold,
-                    0
-                ),
-                1
-            )
+        let progress = isExpanded
+            ? min(max(-dismissDrag / geometry.dismissThreshold, 0), 1)
             : 0
 
-        let cornerRadius =
-            isExpanded
-            ? screenCornerRadius
-                + (
-                    Layout.collapsedCornerRadius
-                    - screenCornerRadius
-                ) * progress
-            : Layout.collapsedCornerRadius
+        let cornerRadius = isExpanded
+            ? geometry.screenCornerRadius
+                + (geometry.collapsedCornerRadius - geometry.screenCornerRadius) * progress
+            : geometry.collapsedCornerRadius
 
         return CardLayout(
-            position: CGPoint(
-                x: positionX,
-                y: positionY
-            ),
-            width: width,
-            height: height,
+            position: position,
+            size: size,
             offsetY: dismissDrag,
             cornerRadius: cornerRadius
         )
@@ -527,465 +471,238 @@ struct CollectionsView: View {
     private func ghostCardView(
         card: Card,
         index: Int,
-        size: CGSize,
-        squareSize: CGFloat,
-        diskCenter: CGPoint,
-        orbitRadius: CGFloat,
-        screenCornerRadius: CGFloat,
+        geometry: CollectionsGeometry,
         isExpanded: Bool
     ) -> some View {
-
         let layout = cardLayout(
             index: index,
             isExpanded: isExpanded,
-            size: size,
-            squareSize: squareSize,
-            diskCenter: diskCenter,
-            orbitRadius: orbitRadius,
-            screenCornerRadius: screenCornerRadius
+            geometry: geometry
         )
 
         lowResImage(for: card.imageName)
             .resizable()
             .interpolation(.none)
             .aspectRatio(contentMode: .fill)
-            .frame(
-                width: layout.width,
-                height: layout.height
-            )
+            .frame(width: layout.size.width, height: layout.size.height)
             .clipped()
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: layout.cornerRadius
-                )
-            )
+            .clipShape(RoundedRectangle(cornerRadius: layout.cornerRadius))
             .overlay {
-                RoundedRectangle(
-                    cornerRadius: layout.cornerRadius
-                )
-                .fill(.ultraThinMaterial)
-                .opacity(isExpanded ? 1 : 0)
+                RoundedRectangle(cornerRadius: layout.cornerRadius)
+                    .fill(.ultraThinMaterial)
+                    .opacity(isExpanded ? 1 : 0)
             }
             .offset(y: layout.offsetY)
-            .position(
-                x: layout.position.x,
-                y: layout.position.y
-            )
+            .position(layout.position)
             .geometryGroup()
+            .animation(Layout.expandAnimation, value: isExpanded)
+            .zIndex(0)
     }
 
     @ViewBuilder
     private func cardView(
         card: Card,
         index: Int,
-        size: CGSize,
-        squareSize: CGFloat,
-        diskCenter: CGPoint,
-        orbitRadius: CGFloat,
-        screenCornerRadius: CGFloat,
+        geometry: CollectionsGeometry,
         isExpanded: Bool,
         anyExpanded: Bool
     ) -> some View {
-
         let layout = cardLayout(
             index: index,
             isExpanded: isExpanded,
-            size: size,
-            squareSize: squareSize,
-            diskCenter: diskCenter,
-            orbitRadius: orbitRadius,
-            screenCornerRadius: screenCornerRadius
+            geometry: geometry
         )
 
-        Image(card.imageName)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(
-                width: layout.width,
-                height: layout.height
-            )
-            .clipped()
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: layout.cornerRadius
-                )
-            )
-            .overlay {
-                RoundedRectangle(
-                    cornerRadius: layout.cornerRadius
-                )
-                .stroke(
-                    .white.opacity(isExpanded ? 0 : 0.2),
-                    lineWidth: 1
-                )
-            }
-            .overlay {
-                ZStack(alignment: isExpanded ? .top : .bottom) {
-                    // Frosted glass — gradient fills the card on expand.
-                    RoundedRectangle(
-                        cornerRadius: layout.cornerRadius
-                    )
+        let expandedContentOpacity = isExpanded ? 1 - min(max(-dismissDrag / geometry.dismissThreshold, 0), 1) : 0
+
+        ZStack {
+            Image(card.imageName)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: layout.size.width, height: layout.size.height)
+                .clipped()
+
+            ZStack(alignment: isExpanded ? .top : .bottom) {
+                RoundedRectangle(cornerRadius: layout.cornerRadius)
                     .fill(.ultraThinMaterial)
-                    .mask {
-                        RadialGradient(
-                            stops: [
-                                .init(
-                                    color: isExpanded
-                                        ? .black : .clear,
-                                    location: 0.0
-                                ),
-                                .init(
-                                    color: isExpanded
-                                        ? .black : .clear,
-                                    location: 0
-                                ),
-                                .init(
-                                    color: .black,
-                                    location: 1.0
-                                )
-                            ],
-                            center: UnitPoint(x: 0.5, y: 0.0),
-                            startRadius: 0,
-                            endRadius: layout.width * 0.9
-                        )
-                    }
+                    .mask(gradientMask(isExpanded: isExpanded, width: layout.size.width))
 
-                    // Cool-tinted dim at the bottom edge.
-                    RoundedRectangle(
-                        cornerRadius: layout.cornerRadius
-                    )
-                    .fill(
-                        Color(
-                            red: 0.05,
-                            green: 0.07,
-                            blue: 0.12
-                        )
-                        .opacity(isExpanded ? 0 : 0.22)
-                    )
-                    .mask {
-                        RadialGradient(
-                            stops: [
-                                .init(
-                                    color: isExpanded
-                                        ? .black : .clear,
-                                    location: 0.0
-                                ),
-                                .init(
-                                    color: isExpanded
-                                        ? .black : .clear,
-                                    location: 0
-                                ),
-                                .init(
-                                    color: .black,
-                                    location: 1.0
-                                )
-                            ],
-                            center: UnitPoint(x: 0.5, y: 0.0),
-                            startRadius: 0,
-                            endRadius: layout.width * 0.9
-                        )
-                    }
+                RoundedRectangle(cornerRadius: layout.cornerRadius)
+                    .fill(Color(red: 0.05, green: 0.07, blue: 0.12)
+                        .opacity(isExpanded ? 0 : 0.22))
+                    .mask(gradientMask(isExpanded: isExpanded, width: layout.size.width))
 
-                    Text(card.name)
-                        .font(
-                            .system(
-                                size: isExpanded ? 50 : 25,
-                                design: .serif
-                            )
-                        )
-                        .foregroundStyle(.white)
-                        .shadow(
-                            color: .black.opacity(0.35),
-                            radius: 2,
-                            y: 1
-                        )
-                        .padding(
-                            .bottom,
-                            isExpanded
-                                ? 0
-                                : max(12, layout.height * 0.06)
-                        )
-                        .padding(
-                            .top,
-                            isExpanded
-                                ? max(20, layout.height * 0.08)
-                                : 0
-                        )
-                        .animation(
-                            .easeInOut(duration: 0.5),
-                            value: isExpanded
-                        )
-                }
+                InfiniteEmojiCarousel(items: card.items)
+                    .id(card.id)
+                    .padding(.top, max(48, layout.size.height * 0.12))
+                    .padding(.bottom, max(72, layout.size.height * 0.12))
+                    .opacity(expandedContentOpacity)
+                    .allowsHitTesting(isExpanded)
+
+                Text(card.name)
+                    .font(.system(size: isExpanded ? 50 : 25, design: .serif))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    .padding(.bottom, isExpanded ? 0 : max(12, layout.size.height * 0.06))
+                    .padding(.top, isExpanded ? max(20, layout.size.height * 0.08) : 0)
             }
-            .offset(y: layout.offsetY)
-            .position(
-                x: layout.position.x,
-                y: layout.position.y
-            )
-            .geometryGroup()
-            .allowsHitTesting(
-                !anyExpanded || isExpanded
-            )
-            .onTapGesture {
-                guard expandedIndex == nil else {
-                    return
-                }
+        }
+        .frame(width: layout.size.width, height: layout.size.height)
+        .clipShape(RoundedRectangle(cornerRadius: layout.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: layout.cornerRadius)
+                .stroke(.white.opacity(isExpanded ? 0 : 0.2), lineWidth: 1)
+        }
+        .offset(y: layout.offsetY)
+        .position(layout.position)
+        .geometryGroup()
+        .animation(Layout.expandAnimation, value: isExpanded)
+        .zIndex(1)
+        .allowsHitTesting(!anyExpanded || isExpanded)
+        .onTapGesture {
+            guard expandedIndex == nil else { return }
 
-                withAnimation(Layout.expandAnimation) {
-                    expandedIndex = index
-                }
+            withAnimation(Layout.expandAnimation) {
+                expandedIndex = index
+                collectionsExpanded = true
             }
-            .gesture(
-                expandDismissGesture(
-                    isExpanded: isExpanded
-                )
-            )
-            .accessibilityLabel(
-                card.imageName.replacingOccurrences(
-                    of: "Background",
-                    with: ""
-                )
-            )
-            .accessibilityHint(
-                isExpanded
-                ? "Swipe up to dismiss"
-                : "Double tap to open"
-            )
+        }
+        .simultaneousGesture(
+            expandDismissGesture(geometry: geometry, isExpanded: isExpanded)
+        )
+        .accessibilityLabel(card.imageName.replacingOccurrences(of: "Background", with: ""))
+        .accessibilityHint(isExpanded ? "Swipe up to dismiss" : "Double tap to open")
+    }
+
+    private func gradientMask(isExpanded: Bool, width: CGFloat) -> some View {
+        RadialGradient(
+            stops: [
+                .init(color: isExpanded ? .black : .clear, location: 0.0),
+                .init(color: .black, location: 1.0)
+            ],
+            center: UnitPoint(x: 0.5, y: 0.0),
+            startRadius: 0,
+            endRadius: width * 0.9
+        )
     }
 
     // MARK: - Expand / Dismiss
 
     private func expandDismissGesture(
+        geometry: CollectionsGeometry,
         isExpanded: Bool
     ) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                guard isExpanded else { return }
 
-        DragGesture(
-            minimumDistance: 0,
-            coordinateSpace: .local
-        )
-        .onChanged { value in
-            guard isExpanded else {
-                return
-            }
-
-            // Track the finger 1:1, allowing only an upward drag so the
-            // card follows the gesture exactly (HIG: "work with behavior
-            // rather than animation").
-            let translation = value.translation.height
-
-            dismissDrag = translation < 0 ? translation : 0
-        }
-        .onEnded { value in
-            guard isExpanded else {
-                return
-            }
-
-            let translation = value.translation.height
-            let velocity = value.velocity.height
-
-            let shouldDismiss =
-                translation < -Layout.dismissThreshold
-                || velocity < -Layout.dismissVelocity
-
-            if shouldDismiss {
-                // Follow through: keep the finger's offset while the card
-                // springs back down into its slot on the turntable,
-                // retracing the expansion path in reverse (spatial
-                // consistency).
-                withAnimation(Layout.dismissAnimation) {
-                    expandedIndex = nil
+                guard dismissAxisLocked
+                    || abs(value.translation.height) > abs(value.translation.width)
+                else {
                     dismissDrag = 0
+                    return
                 }
-            } else {
-                // Rubber-band return to the expanded state.
-                withAnimation(Layout.snapBackAnimation) {
+
+                dismissAxisLocked = true
+                dismissDrag = value.translation.height < 0 ? value.translation.height : 0
+            }
+            .onEnded { value in
+                guard isExpanded, dismissAxisLocked else {
+                    dismissAxisLocked = false
+                    dismissDrag = 0
+                    return
+                }
+
+                defer { dismissAxisLocked = false }
+
+                let shouldDismiss =
+                    value.translation.height < -geometry.dismissThreshold
+                    || value.velocity.height < -Layout.dismissVelocity
+
+                withAnimation(shouldDismiss ? Layout.dismissAnimation : Layout.snapBackAnimation) {
+                    if shouldDismiss {
+                        expandedIndex = nil
+                        collectionsExpanded = false
+                    }
                     dismissDrag = 0
                 }
             }
-        }
     }
 
     // MARK: - Disk Gesture
 
     private func diskDragGesture(
-        center: CGPoint
+        center: CGPoint,
+        geometry: CollectionsGeometry
     ) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(CoordinateSpaces.collections))
+            .onChanged { value in
+                guard expandedIndex == nil else { return }
 
-        DragGesture(
-            minimumDistance: 0,
-            coordinateSpace: .named(
-                CoordinateSpaces.collections
-            )
-        )
-        .onChanged { value in
-            guard expandedIndex == nil else {
-                return
-            }
+                let dx = value.location.x - center.x
+                let dy = value.location.y - center.y
+                guard hypot(dx, dy) >= geometry.diskDeadZone else { return }
 
-            let location = value.location
+                let currentAngle = angle(of: value.location, around: center)
 
-            let dx =
-                location.x - center.x
+                guard isDraggingDisk else {
+                    isDraggingDisk = true
+                    lastFingerAngle = currentAngle
+                    lastHapticRidge = currentHapticRidge()
+                    return
+                }
 
-            let dy =
-                location.y - center.y
-
-            let distance =
-                hypot(dx, dy)
-
-            // Do not try to calculate an angle close to
-            // the center of the turntable.
-            guard distance >=
-                    UIConstants.Collections.diskDeadZone
-            else {
-                return
-            }
-
-            let currentAngle =
-                angle(
-                    of: location,
-                    around: center
-                )
-
-            // First valid event establishes the angular baseline.
-            guard isDraggingDisk else {
-                isDraggingDisk = true
+                rotation += normalizedAngleDelta(from: lastFingerAngle, to: currentAngle)
                 lastFingerAngle = currentAngle
-
-                lastHapticRidge =
-                    currentHapticRidge()
-
-                return
+                updateHapticRidge()
             }
+            .onEnded { value in
+                defer { isDraggingDisk = false }
 
-            // Only use the angular change between consecutive
-            // finger positions. This is the direct-manipulation
-            // portion of the interaction.
-            let delta =
-                normalizedAngleDelta(
-                    from: lastFingerAngle,
-                    to: currentAngle
+                guard expandedIndex == nil else { return }
+
+                guard isDraggingDisk else {
+                    snapToNearest()
+                    return
+                }
+
+                let current = value.location
+                let predicted = value.predictedEndLocation
+
+                guard hypot(current.x - center.x, current.y - center.y) >= geometry.diskDeadZone,
+                      hypot(predicted.x - center.x, predicted.y - center.y) >= geometry.diskDeadZone
+                else {
+                    snapToNearest()
+                    return
+                }
+
+                let predictedRotation = rotation + normalizedAngleDelta(
+                    from: angle(of: current, around: center),
+                    to: angle(of: predicted, around: center)
                 )
 
-            rotation += delta
-            lastFingerAngle = currentAngle
-
-            updateHapticRidge()
-        }
-        .onEnded { value in
-            defer {
-                isDraggingDisk = false
+                animateToCard(nearestCardIndex(to: predictedRotation))
             }
-
-            guard expandedIndex == nil else {
-                return
-            }
-
-            guard isDraggingDisk else {
-                snapToNearest()
-                return
-            }
-
-            let currentLocation =
-                value.location
-
-            let predictedLocation =
-                value.predictedEndLocation
-
-            let currentDistance =
-                hypot(
-                    currentLocation.x - center.x,
-                    currentLocation.y - center.y
-                )
-
-            let predictedDistance =
-                hypot(
-                    predictedLocation.x - center.x,
-                    predictedLocation.y - center.y
-                )
-
-            // We need both points to be far enough from
-            // the center for a reliable angular prediction.
-            guard currentDistance >=
-                    UIConstants.Collections.diskDeadZone,
-                  predictedDistance >=
-                    UIConstants.Collections.diskDeadZone
-            else {
-                snapToNearest()
-                return
-            }
-
-            let currentAngle =
-                angle(
-                    of: currentLocation,
-                    around: center
-                )
-
-            let predictedAngle =
-                angle(
-                    of: predictedLocation,
-                    around: center
-                )
-
-            // Apple's predictedEndLocation is already based
-            // on the drag's current velocity. Convert the
-            // predicted finger movement directly into angular
-            // movement around the turntable.
-            let predictedAngularDelta =
-                normalizedAngleDelta(
-                    from: currentAngle,
-                    to: predictedAngle
-                )
-
-            let predictedRotation =
-                rotation + predictedAngularDelta
-
-            let target =
-                nearestCardIndex(
-                    to: predictedRotation
-                )
-
-            animateToCard(target)
-        }
     }
 
     // MARK: - Rotation / Snapping
 
-    private func nearestCardIndex(
-        to rotation: Double
-    ) -> Int {
-
-        Int(
-            round(
-                -rotation / Layout.cardSpacing
-            )
-        )
+    private func nearestCardIndex(to rotation: Double) -> Int {
+        Int(round(-rotation / Layout.cardSpacing))
     }
 
     private func snapToNearest() {
-        let target =
-            nearestCardIndex(
-                to: rotation
-            )
-
-        animateToCard(target)
+        animateToCard(nearestCardIndex(to: rotation))
     }
 
     private func animateToCard(_ target: Int) {
-        let targetRotation =
-            Double(-target) * Layout.cardSpacing
-
         var transaction = Transaction(
-            animation: .smooth(
-                duration: Layout.snapSpring.duration,
-                extraBounce: 0
-            )
+            animation: .smooth(duration: Layout.snapSpring.duration)
         )
-
         transaction.tracksVelocity = false
 
         withTransaction(transaction) {
-            rotation = targetRotation
+            rotation = Double(-target) * Layout.cardSpacing
         }
 
         updateHapticRidge(to: target)
@@ -994,42 +711,19 @@ struct CollectionsView: View {
     // MARK: - Haptics
 
     private func currentHapticRidge() -> Int {
-        Int(
-            round(
-                -rotation / Layout.cardSpacing
-            )
-        )
+        Int(round(-rotation / Layout.cardSpacing))
     }
 
     private func updateHapticRidge() {
-        let ridge =
-            currentHapticRidge()
-
-        guard ridge != lastHapticRidge else {
-            return
-        }
-
-        let delta =
-            ridge - lastHapticRidge
-
-        // Change the trigger once for every crossed card
-        // position. SwiftUI's sensoryFeedback modifier then
-        // provides the actual feedback.
-        hapticTrigger += abs(delta)
-
+        let ridge = currentHapticRidge()
+        guard ridge != lastHapticRidge else { return }
+        hapticTrigger += abs(ridge - lastHapticRidge)
         lastHapticRidge = ridge
     }
 
-    private func updateHapticRidge(
-        to target: Int
-    ) {
-        let delta =
-            target - lastHapticRidge
-
-        guard delta != 0 else {
-            return
-        }
-
+    private func updateHapticRidge(to target: Int) {
+        let delta = target - lastHapticRidge
+        guard delta != 0 else { return }
         hapticTrigger += abs(delta)
         lastHapticRidge = target
     }

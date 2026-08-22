@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 import SwiftUI
 
 enum UIConstants {
@@ -29,16 +28,10 @@ enum UIConstants {
     }
 
     enum General {
-        private static let screen: UIScreen = {
-            (UIApplication.shared.connectedScenes.first as? UIWindowScene)!.screen
-        }()
-
-        static let screenWidth = screen.bounds.width
-        static let screenHeight = screen.bounds.height
-        static let screenCornerRadius: CGFloat = screen.value(forKey: "_displayCornerRadius") as? CGFloat ?? 0
-        /// Minimum inset kept clear of the screen's rounded corners and home indicator.
+        static let screenCornerRadius: CGFloat = 40
         static let safeSpace: CGFloat = 15
     }
+
     enum Animation {
         static let tracking = SwiftUI.Animation.interactiveSpring(response: 0.1, dampingFraction: 0.86)
         static let snap = SwiftUI.Animation.spring(response: 0.35, dampingFraction: 0.8)
