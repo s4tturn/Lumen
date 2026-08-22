@@ -54,13 +54,15 @@ enum FocusedState {
     /// motion guidance (WWDC18 "Designing Fluid Interfaces", WWDC23 "Animate
     /// with springs"): spring-driven, critically damped (`extraBounce: 0`)
     /// for seamless curves. Focusing in snaps in responsively (`snappy`);
-    /// receding and dissolving states yield fluidly (`smooth`).
+    /// receding states yield fluidly (`smooth`). `hidden` instead exits on
+    /// an accelerating `easeIn` curve (Apple's classic exit pacing) so the
+    /// blur, scale, and opacity all dissolve with the same accelerating exit.
     var motion: Animation {
         switch self {
         case .visible:              return .snappy(duration: duration, extraBounce: 0)
         case .subdued,
-             .subduedAlt,
-             .hidden:               return .smooth(duration: duration, extraBounce: 0)
+             .subduedAlt:           return .smooth(duration: duration, extraBounce: 0)
+        case .hidden:               return .easeIn(duration: duration)
         }
     }
 
@@ -109,6 +111,5 @@ struct FocusContainer<Content: View>: View {
             .scaleEffect(state.scale, anchor: alignment.anchor)
             .animation(state.motion, value: state)
             .opacity(state.opacity)
-            .animation(state.fade, value: state)
     }
 }

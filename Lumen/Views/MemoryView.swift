@@ -7,6 +7,8 @@ struct MemoryView: View {
             Text("Memory")
                 .font(.system(size: 40, weight: .bold))
                 .foregroundColor(.white)
+                .accessibilityLabel("Memory")
+                .accessibilityAddTraits(.isHeader)
         }
     }
 }

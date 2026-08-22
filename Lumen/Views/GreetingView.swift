@@ -15,9 +15,10 @@ struct GreetingView: View {
         Text(greeting)
             .font(.system(size: 48, design: .serif))
             .foregroundColor(.white)
-            .frame(width: UIConstants.General.screenWidth * 0.8, alignment: .center)
+            .containerRelativeFrame(.horizontal) { length, _ in length * 0.8 }
             .lineLimit(1)
             .minimumScaleFactor(0.5)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
