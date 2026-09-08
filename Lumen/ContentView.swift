@@ -10,60 +10,44 @@ import SwiftUI
     }
 }
 
-// MARK: - Root View
-
-/// Root orchestrator for Lumen. Manages the startup greeting sequence,
-/// layers all views in a ZStack, and coordinates cross-view focus changes.
 struct ContentView: View {
-    @State private var greetingState: FocusedState = .hidden
-    @State private var navigationState: FocusedState = .subduedAlt
+    private static let greetingHoldDuration: TimeInterval = 0.8
+    private static var greetingRevealDelay: TimeInterval {
+        UIConstants.Animation.snappyDuration + Self.greetingHoldDuration
+    }
+
     @State private var collectionsExpanded = false
+    @State private var breathingState = BreathingState()
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            FocusContainer(state: navigationState) {
-                CoreNavigation(collectionsExpanded: $collectionsExpanded)
-            }
+            CoreNavigation(collectionsExpanded: $collectionsExpanded)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .focus(.navigation, default: .subdued)
 
-            FocusContainer(state: greetingState) {
-                GreetingView()
-            }
+            GreetingView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .focus(.greeting, default: .hidden)
 
             AmbientPlayer(collectionsExpanded: $collectionsExpanded)
+                .focus(.ambient, default: .visible)
         }
+        .environment(breathingState)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Lumen")
         .ignoresSafeArea()
         .task { await startupSequence() }
     }
-
-    // MARK: - Startup Sequence
-
-    /// The greeting opens the app with a quiet, unhurried beat (~2s): a brief
-    /// pause, a fluid fade-in, a glanceable dwell, then the greeting departs
-    /// on its curved `hidden` fade-out as the interface emerges beneath it —
-    /// people don't wait for a separate reveal (HIG "Launching", "Onboarding").
-    /// All motion is owned by `FocusedState`, so the greeting's fade is
-    /// `FocusedState.visible.duration`; `holdDuration` is measured from when
-    /// the fade-in *completes*, so dwell never drifts with fade speed.
-    private static let appearDelay: TimeInterval = 0.1
-    private static let holdDuration: TimeInterval = 0.8
-
-    /// Cancellable startup: brief pause, quick fade in, glanceable dwell,
-    /// then the greeting departs as the interface emerges beneath it.
-    /// Structured concurrency replaces the old DispatchQueue timers,
-    /// cancelling automatically if the view leaves the hierarchy.
+    
     private func startupSequence() async {
-        await Self.sleep(Self.appearDelay)
-        greetingState = .visible
-
-        await Self.sleep(FocusedState.visible.duration + Self.holdDuration)
-        greetingState = .hidden
-        navigationState = .visible
+        Focus.visible(.greeting)
+        await Self.sleep(Self.greetingRevealDelay)
+        Focus.hide(.greeting)
+        Focus.visible(.navigation)
     }
 
     private static func sleep(_ seconds: TimeInterval) async {
-        try? await Task.sleep(for: .milliseconds(Int(seconds * 1000)))
+        try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
 }
