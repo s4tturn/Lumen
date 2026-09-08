@@ -6,7 +6,7 @@ struct MemoryView: View {
             Color.green
             Text("Memory")
                 .font(.system(size: 40, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .accessibilityLabel("Memory")
                 .accessibilityAddTraits(.isHeader)
         }

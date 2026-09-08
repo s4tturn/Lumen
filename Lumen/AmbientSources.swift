@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct AmbientSource: Identifiable, Sendable {
-    let id = UUID()
+    /// Stable across rebuilds — never a fresh UUID per render (morph/id rule).
+    var id: String { resourceName }
     let name: String
     let icon: String
     let color: Color

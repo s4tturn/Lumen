@@ -1,9 +1,13 @@
 import SwiftUI
 import AVFoundation
 import Observation
+import OSLog
 
+private let ambientLog = Logger(subsystem: "s4tturn.Lumen", category: "Ambient")
+
+@MainActor
 @Observable
-final class AmbientEngine: @unchecked Sendable {
+final class AmbientEngine {
     var isPlaying = false
     var currentSource: AmbientSource?
 
@@ -15,8 +19,11 @@ final class AmbientEngine: @unchecked Sendable {
     private let playerNode = AVAudioPlayerNode()
     private let mixer = AVAudioMixerNode()
     private var bufferCache: [AmbientSource.ID: AVAudioPCMBuffer] = [:]
-    private var interruptionTask: Task<Void, Never>?
-    private var routeChangeTask: Task<Void, Never>?
+    // Task handles are Sendable; excluded from observation and nonisolated
+    // so deinit can cancel them.
+    @ObservationIgnored private nonisolated(unsafe) var interruptionTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var resumptionTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var routeChangeTask: Task<Void, Never>?
     private var interruptedWhilePlaying = false
 
     init() {
@@ -25,13 +32,14 @@ final class AmbientEngine: @unchecked Sendable {
         currentSource = AmbientSource.all.first
         prewarmBuffers()
         observeInterruptions()
+        observeResumptionRecommendation()
         observeRouteChanges()
     }
 
     deinit {
         interruptionTask?.cancel()
+        resumptionTask?.cancel()
         routeChangeTask?.cancel()
-        engine.stop()
     }
 
     // MARK: - Buffer Management
@@ -59,8 +67,13 @@ final class AmbientEngine: @unchecked Sendable {
     private func configureEngine() {
         engine.attach(mixer)
         engine.attach(playerNode)
-        engine.connect(playerNode, to: mixer, format: nil)
-        engine.connect(mixer, to: engine.mainMixerNode, format: nil)
+        do {
+            try engine.connectNode(playerNode, to: mixer, format: nil)
+            try engine.connectNode(mixer, to: engine.mainMixerNode, format: nil)
+        } catch {
+            ambientLog.error("Engine connect failed: \(error.localizedDescription)")
+            return
+        }
         mixer.outputVolume = volume
         try? engine.start()
     }
@@ -77,7 +90,12 @@ final class AmbientEngine: @unchecked Sendable {
         guard let buf = buffer(for: source) else { return }
 
         playerNode.scheduleBuffer(buf, at: nil, options: .loops)
-        playerNode.play()
+        do {
+            try playerNode.playAudio()
+        } catch {
+            ambientLog.error("Playback failed: \(error.localizedDescription)")
+            return
+        }
         isPlaying = true
     }
 
@@ -114,50 +132,62 @@ final class AmbientEngine: @unchecked Sendable {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true, options: [])
         } catch {
-            print("AmbientEngine: audio session setup failed - \(error)")
+            ambientLog.error("Audio session setup failed: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Interruption Handling
+    // MARK: - Interruption Handling (iOS 27 session model)
 
     private func observeInterruptions() {
-        interruptionTask = Task { [weak self] in
+        interruptionTask = Task { @MainActor [weak self] in
             for await notification in NotificationCenter.default.notifications(
-                named: AVAudioSession.interruptionNotification,
+                named: AVAudioSession.didBecomeInactiveNotification,
                 object: AVAudioSession.sharedInstance()
             ) {
                 guard let self else { return }
-                self.handleInterruption(notification)
+                self.handleDeactivation(notification)
             }
         }
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+    private func handleDeactivation(_ notification: Notification) {
+        interruptedWhilePlaying = isPlaying
+        if isPlaying { pause() }
+        if let context = notification.userInfo?[AVAudioSession.deactivationContextKey]
+            as? AVAudioSession.DeactivationContext
+        {
+            ambientLog.debug("Session deactivated by \(context.source.rawValue)")
+        }
+    }
+
+    private func handleResumptionRecommendation(_ notification: Notification) {
+        guard let context = notification.userInfo?[AVAudioSession.resumptionContextKey]
+            as? AVAudioSession.ResumptionContext
         else { return }
 
-        switch type {
-        case .began:
-            interruptedWhilePlaying = isPlaying
-            if isPlaying { pause() }
-        case .ended:
-            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-            if options.contains(.shouldResume), interruptedWhilePlaying {
-                interruptedWhilePlaying = false
-                play()
-            }
-        default:
-            break
+        if context.recommendation == .shouldResume, interruptedWhilePlaying {
+            interruptedWhilePlaying = false
+            play()
+        } else {
+            interruptedWhilePlaying = false
         }
     }
 
     // MARK: - Route Change Handling
 
-    private func observeRouteChanges() {
-        routeChangeTask = Task { [weak self] in
+    private func observeResumptionRecommendation() {
+        resumptionTask = Task { @MainActor [weak self] in
+            for await notification in NotificationCenter.default.notifications(
+                named: AVAudioSession.resumptionRecommendationNotification,
+                object: AVAudioSession.sharedInstance()
+            ) {
+                guard let self else { return }
+                self.handleResumptionRecommendation(notification)
+            }
+        }
+    }
+
+    private func observeRouteChanges() {        routeChangeTask = Task { @MainActor [weak self] in
             for await notification in NotificationCenter.default.notifications(
                 named: AVAudioSession.routeChangeNotification,
                 object: AVAudioSession.sharedInstance()

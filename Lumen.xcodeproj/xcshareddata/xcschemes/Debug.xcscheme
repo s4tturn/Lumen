@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "2700"
-   version = "2.0">
+   version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES"
@@ -17,48 +17,38 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "34C9BEEC30304B5600964E88"
                BuildableName = "Lumen.app"
-               BlueprintName = "Lumen"
                ReferencedContainer = "container:Lumen.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Release"
-      selectedDebuggerIdentifier = ""
-      selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
    </TestAction>
    <LaunchAction
-      buildConfiguration = "Release"
-      selectedDebuggerIdentifier = ""
-      selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
-      disableMainThreadChecker = "YES"
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
       useCustomWorkingDirectory = "NO"
       ignoresPersistentStateOnLaunch = "NO"
-      debugDocumentVersioning = "NO"
-      debugXPCServices = "NO"
+      debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-      enableGPUValidationMode = "1"
-      allowLocationSimulation = "NO"
-      viewDebuggingEnabled = "No"
-      queueDebuggingEnabled = "No"
-      disablePerformanceAntipatternChecker = "YES">
+      allowLocationSimulation = "YES"
+      queueDebuggingEnabled = "No">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "34C9BEEC30304B5600964E88"
             BuildableName = "Lumen.app"
-            BlueprintName = "Lumen"
             ReferencedContainer = "container:Lumen.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <MetalAPIValidationSettings
-         isEnabled = "No">
-      </MetalAPIValidationSettings>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -72,13 +62,12 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "34C9BEEC30304B5600964E88"
             BuildableName = "Lumen.app"
-            BlueprintName = "Lumen"
             ReferencedContainer = "container:Lumen.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
-      buildConfiguration = "Release">
+      buildConfiguration = "Debug">
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
