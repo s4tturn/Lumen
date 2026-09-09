@@ -31,7 +31,9 @@ struct ContentView: View {
                 .focus(.greeting, default: .hidden)
 
             AmbientPlayer(collectionsExpanded: $collectionsExpanded)
-                .focus(.ambient, default: .visible)
+                // Anchored at the pill, not screen center: the scale effect
+                // must grow out of the object itself.
+                .focus(.ambient, default: .visible, anchor: .bottom)
         }
         .environment(breathingState)
         .accessibilityElement(children: .contain)
