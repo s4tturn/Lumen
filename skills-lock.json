@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "skills": {
+    "apple-design": {
+      "source": "dickwu/apple-design-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "812f55b5cdda9065dbca33cf0fb81257a7ac6858b2457c69c0a5d20b19e1cec1"
+    },
+    "apple-motion-feel": {
+      "source": "YordiLorenzo/liquid-glass-skills",
+      "sourceType": "github",
+      "skillPath": "apple-motion-feel/SKILL.md",
+      "computedHash": "57a20236e097100882389c43d93dcf88257d944a092c447efaf74354c7e68468"
+    },
+    "liquid-glass": {
+      "source": "YordiLorenzo/liquid-glass-skills",
+      "sourceType": "github",
+      "skillPath": "liquid-glass/SKILL.md",
+      "computedHash": "cc2f2282ab62cc9908330aba2b3147f29775ebca5f8f1a77283ef713713dd1d4"
+    },
+    "liquid-glass-motion": {
+      "source": "YordiLorenzo/liquid-glass-skills",
+      "sourceType": "github",
+      "skillPath": "liquid-glass-motion/SKILL.md",
+      "computedHash": "4e854636cfd959895fae89d2242aec13d34432a47559d11f8fe1a0c9e4b8de1e"
+    },
+    "sosumi": {
+      "source": "sosumi.ai",
+      "sourceUrl": "https://sosumi.ai",
+      "sourceType": "well-known",
+      "computedHash": "ed80519bc628e98a9b56d897ed27a205e3511981ffbdfc7d0fefd472aba8e224",
+      "wellKnownDigest": "sha256:4530e014b0499b09aa99f7aa6468065021d7ebbf429524ddfcb5348e596f9db5"
+    },
+    "swiftui-expert-skill": {
+      "source": "avdlee/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-expert-skill/SKILL.md",
+      "computedHash": "26ee28fcfa0434b1ad66ae742e8a82a16cc2a0e40b9a9a02ea550e597366c7eb"
+    },
+    "swiftui-pro": {
+      "source": "twostraws/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swiftui-pro/SKILL.md",
+      "computedHash": "07033426e384295a4b49cf0b2ffdefd4098cae4af53fef16bc1f2d9281118c41"
+    },
+    "update-swiftui-apis": {
+      "source": "avdlee/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/update-swiftui-apis/SKILL.md",
+      "computedHash": "1aebd4401fcaf0bd28f64e6e1332c40d90058e2a89a415536deed3556a2b8f78"
+    }
+  }
+}
