@@ -3,12 +3,16 @@ import SwiftUI
 private let ambientPillShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 
 struct AmbientPlayer: View {
-    @Binding private var collectionsExpanded: Bool
     @State private var engine = AmbientEngine()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// What the open collection is showing, and what is already finished. The
+    /// only two facts the complete control needs, and both are derived: this view
+    /// keeps no record of "am I completed" of its own to fall out of step.
+    @Environment(CollectionFocus.self) private var focus
+    @Environment(CollectionCompletionStore.self) private var completions
     @Namespace private var morphNamespace
 
-    private enum Mode { case compact, expanded, volume, complete, completed }
+    private enum Mode { case compact, expanded, volume }
     private enum DragAxis { case horizontal, vertical, ignored }
 
     @State private var state: Mode = .compact
@@ -38,10 +42,6 @@ struct AmbientPlayer: View {
         )
     }
 
-    init(collectionsExpanded: Binding<Bool> = .constant(false)) {
-        _collectionsExpanded = collectionsExpanded
-    }
-
     private func motion(_ base: Animation) -> Animation {
         UIConstants.Animation.motionGate(base, reduceMotion: reduceMotion)
     }
@@ -63,21 +63,25 @@ struct AmbientPlayer: View {
     private var bottomPadding: CGFloat {
         state == .expanded ? UIConstants.General.safeSpace : 32
     }
-    private var gesturesEnabled: Bool {
-        !collectionsExpanded && state != .complete && state != .completed
+    /// The transport is off for exactly as long as a collection is open: the
+    /// focus is non-`nil` for the card's whole lifetime, so one signal covers
+    /// both "a card is up" and "there is a task to complete".
+    private var gesturesEnabled: Bool { focus.task == nil }
+
+    /// The open collection's task, resolved from the catalog.
+    ///
+    /// `nil` when nothing is open *and* if a focus ever named a task this build
+    /// no longer has — in which case the transport comes back rather than
+    /// offering to complete something with no content to complete.
+    private var visibleTask: CollectionTask? {
+        focus.task.flatMap { CollectionCatalog.entry(for: $0)?.1 }
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             GlassEffectContainer(spacing: 24) {
                 ZStack {
-                    switch state {
-                    case .expanded: expandedBand
-                    case .volume: volumePill
-                    case .complete: completePill
-                    case .completed: completedControls
-                    case .compact: compactPill
-                    }
+                    content
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
@@ -104,19 +108,32 @@ struct AmbientPlayer: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .coordinateSpace(name: "AmbientPlayer")
         .onPreferenceChange(SourceCardFrameKey.self) { cardFrames = $0 }
-        .onChange(of: collectionsExpanded) { _, expanded in
-            withAnimation(motion(UIConstants.Animation.smoothSpring)) {
-                state = expanded ? .complete : .compact
-            }
-        }
-        .task(id: state == .completed) {
-            guard state == .completed else { return }
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            withAnimation(motion(UIConstants.Animation.snappySpring)) { state = .complete }
-        }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
         .sensoryFeedback(.selection, trigger: hapticTrigger)
+    }
+
+    /// Which control belongs at the bottom, decided entirely by what the
+    /// collection is showing: a card up swaps the transport for Complete, and a
+    /// task that is already finished swaps Complete for the way back out of it.
+    ///
+    /// Completion is not a state machine here. The finished answer comes from the
+    /// store and the visible answer from the pager, so undoing restores Complete
+    /// on the same frame and it stays there until the card closes.
+    @ViewBuilder
+    private var content: some View {
+        if let task = visibleTask {
+            if completions.isCompleted(task.id) {
+                undoControl(for: task)
+            } else {
+                completeControl(for: task)
+            }
+        } else {
+            switch state {
+            case .expanded: expandedBand
+            case .volume: volumePill
+            case .compact: compactPill
+            }
+        }
     }
 
     private var compactPill: some View {
@@ -137,9 +154,12 @@ struct AmbientPlayer: View {
             .padding(.bottom, 32)
     }
 
-    private var completePill: some View {
+    private func completeControl(for task: CollectionTask) -> some View {
         Button {
-            withAnimation(motion(UIConstants.Animation.smoothSpring)) { state = .completed }
+            // The store answers on this frame and the keychain write follows it,
+            // so the morph is the tap's own feedback rather than a wait on
+            // `securityd`.
+            withAnimation(motion(UIConstants.Animation.smoothSpring)) { completions.complete(task.id) }
             hapticTrigger += 1
         } label: {
             Text("Complete")
@@ -151,6 +171,9 @@ struct AmbientPlayer: View {
         .buttonStyle(.plain)
         .contentShape(Metrics.pillShape)
         .accessibilityLabel("Complete")
+        // Which task, announced: the button acts on one specific task, and the
+        // card holding it is not where VoiceOver\u2019s focus is.
+        .accessibilityValue(Text(task.title))
         .accessibilityAddTraits(.isButton)
         .glassEffect(.clear.interactive(), in: Metrics.pillShape)
         .glassEffectID("complete", in: morphNamespace)
@@ -158,10 +181,10 @@ struct AmbientPlayer: View {
         .padding(.bottom, 32)
     }
 
-    private var completedControls: some View {
+    private func undoControl(for task: CollectionTask) -> some View {
         HStack(spacing: 32) {
             Button {
-                withAnimation(motion(UIConstants.Animation.snappySpring)) { state = .complete }
+                withAnimation(motion(UIConstants.Animation.snappySpring)) { completions.undo(task.id) }
                 hapticTrigger += 1
             } label: {
                 Image(systemName: "trash")
@@ -173,6 +196,7 @@ struct AmbientPlayer: View {
             .buttonStyle(.plain)
             .contentShape(Circle())
             .accessibilityLabel("Undo completion")
+            .accessibilityValue(Text(task.title))
             .accessibilityAddTraits(.isButton)
             .glassEffect(.clear.tint(.red).interactive(), in: Circle())
             .glassEffectID("completionTrash", in: morphNamespace)
@@ -185,9 +209,9 @@ struct AmbientPlayer: View {
                 .transition(contentTransition)
                 .contentShape(Metrics.pillShape)
                 .accessibilityLabel("Completed")
+                .accessibilityValue(Text(task.title))
                 .glassEffect(.clear.interactive(), in: Metrics.pillShape)
                 .glassEffectID("completed", in: morphNamespace)
-                .glassEffectTransition(morphTransition)
         }
         .padding(.bottom, 32)
     }

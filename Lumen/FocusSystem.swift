@@ -56,6 +56,7 @@ enum FocusLayer: String, CaseIterable {
     case greeting
     case navigation
     case ambient
+    case prompt
 }
 
 enum Focus {

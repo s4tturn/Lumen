@@ -11,6 +11,9 @@ import SwiftUI
 struct CollectionsView: View {
     @Binding private var collectionsExpanded: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Which task the open card is showing, shared with the ambient player so the
+    /// Complete control acts on what is actually on screen.
+    @Environment(CollectionFocus.self) private var focus
     @State private var model = CollectionsModel()
 
     private let pageSize: CGSize
@@ -30,14 +33,15 @@ struct CollectionsView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            DiskView(model: model, geo: geo, focusedName: cards[model.focused].name)
+            DiskView(model: model, geo: geo, focusedTitle: CollectionCatalog.all[model.focused].title)
                 .zIndex(2)
                 .allowsHitTesting(expanded == nil)
 
-            ForEach(cards.indices, id: \.self) { index in
+            ForEach(Array(CollectionCatalog.all.enumerated()), id: \.element.id) { index, collection in
                 OrbitCard(
                     model: model,
-                    card: cards[index],
+                    collection: collection,
+                    focus: focus,
                     index: index,
                     geo: geo,
                     isExpanded: expanded == index,
@@ -64,11 +68,14 @@ struct CollectionsView: View {
     private func expand(_ index: Int) {
         guard model.expanded == nil else { return }
         // Nearest straight angle: the morph always takes the shortest path.
-        model.landing = 360 * round((model.rotation + Double(index) * Geo.spacing) / 360)
+        model.landing = 360 * round((model.rotation + Double(index) * CollectionCatalog.spacing) / 360)
         withAnimation(expandAnimation) {
             model.expanded = index
             model.front = index
             collectionsExpanded = true
+            // Opened on the first task, inside this same animation so the
+            // ambient control morphs in with the card rather than a frame later.
+            focus.task = CollectionCatalog.all[index].tasks.first?.id
         }
     }
 
@@ -89,6 +96,10 @@ struct CollectionsView: View {
             if shouldDismiss {
                 model.expanded = nil
                 collectionsExpanded = false
+                // Retracted with the card, never before: a completion can only be
+                // made against a task that is on screen, so the focus's lifetime
+                // is exactly the card's.
+                focus.task = nil
             }
             model.dismiss = 0
         }
@@ -114,15 +125,16 @@ final class CollectionsModel {
     @ObservationIgnored var epoch = 0
 
     var focused: Int {
-        let raw = Int(round(-rotation / Geo.spacing))
-        return ((raw % cards.count) + cards.count) % cards.count
+        let raw = Int(round(-rotation / CollectionCatalog.spacing))
+        let count = CollectionCatalog.count
+        return ((raw % count) + count) % count
     }
 
     func settle(_ target: Int, animation: Animation) {
         epoch += 1
         let current = epoch
         withAnimation(animation) {
-            rotation = Double(-target) * Geo.spacing
+            rotation = Double(-target) * CollectionCatalog.spacing
         } completion: {
             self.fold(epoch: current)
         }
@@ -132,7 +144,7 @@ final class CollectionsModel {
     func flick(to target: Int, animation: (Double) -> Animation) {
         epoch += 1
         let current = epoch
-        let destination = Double(-target) * Geo.spacing
+        let destination = Double(-target) * CollectionCatalog.spacing
         let remaining = destination - rotation
         withAnimation(animation(remaining == 0 ? 0 : velocity / remaining)) {
             rotation = destination
@@ -156,8 +168,6 @@ final class CollectionsModel {
 
 /// Pure function of the stable page size; one instance per body evaluation.
 private struct Geo: Sendable {
-    static let spacing = 360.0 / Double(cards.count)
-
     let size: CGSize
     var radius: CGFloat { size.height * 0.35 }
     var card: CGFloat { radius * 2 * 0.5 }
@@ -177,7 +187,7 @@ private struct Geo: Sendable {
 private struct DiskView: View {
     @Bindable var model: CollectionsModel
     let geo: Geo
-    let focusedName: String
+    let focusedTitle: LocalizedStringResource
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -186,10 +196,10 @@ private struct DiskView: View {
                 Circle().fill(.black.opacity(0.6))
                 Canvas { context, size in
                     let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                    for tick in 0..<6 {
+                    for tick in 0..<CollectionCatalog.count {
                         context.drawLayer { layer in
                             layer.translateBy(x: center.x, y: center.y)
-                            layer.rotate(by: .radians((model.rotation + Double(tick) * 60) * .pi / 180))
+                            layer.rotate(by: .radians(Double(tick) * CollectionCatalog.spacing * .pi / 180))
                             layer.fill(
                                 Path(roundedRect: CGRect(
                                     x: -geo.tick.width / 2,
@@ -202,6 +212,7 @@ private struct DiskView: View {
                         }
                     }
                 }
+                .rotationEffect(.degrees(model.rotation))
             }
             .frame(width: geo.radius * 2, height: geo.radius * 2)
             .glassEffect(.regular, in: Circle())
@@ -209,7 +220,7 @@ private struct DiskView: View {
             .position(geo.center)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Collections disk")
-            .accessibilityValue(focusedName)
+            .accessibilityValue(Text(focusedTitle))
             .accessibilityHint("Swipe up or down to browse collections")
             .accessibilityAdjustableAction { direction in
                 model.settle(
@@ -240,7 +251,7 @@ private struct DiskView: View {
                     model.fingerAngle = current
                     model.fingerTime = value.time
                     model.velocity = 0
-                    model.ridge = Int(floor(-model.rotation / Geo.spacing))
+                    model.ridge = Int(floor(-model.rotation / CollectionCatalog.spacing))
                     return
                 }
                 let step = norm(model.fingerAngle, current)
@@ -249,7 +260,7 @@ private struct DiskView: View {
                 model.rotation += step
                 model.fingerAngle = current
                 model.fingerTime = value.time
-                model.ridge = Int(floor(-model.rotation / Geo.spacing))
+                model.ridge = Int(floor(-model.rotation / CollectionCatalog.spacing))
             }
             .onEnded { value in
                 defer {
@@ -258,7 +269,7 @@ private struct DiskView: View {
                 }
                 guard model.expanded == nil, model.dragging else {
                     model.settle(
-                        Int(round(-model.rotation / Geo.spacing)),
+                        Int(round(-model.rotation / CollectionCatalog.spacing)),
                         animation: gate(UIConstants.Animation.snappySpring)
                     )
                     return
@@ -267,11 +278,11 @@ private struct DiskView: View {
                     hypot(point.x - center.x, point.y - center.y) >= dead
                 }
                 guard clear(value.location), clear(value.predictedEndLocation) else {
-                    model.settle(Int(round(-model.rotation / Geo.spacing)), animation: gate(UIConstants.Animation.snappySpring))
+                    model.settle(Int(round(-model.rotation / CollectionCatalog.spacing)), animation: gate(UIConstants.Animation.snappySpring))
                     return
                 }
                 let projected = model.rotation + norm(angle(of: value.location), angle(of: value.predictedEndLocation))
-                model.flick(to: Int(round(-projected / Geo.spacing))) { normalized in
+                model.flick(to: Int(round(-projected / CollectionCatalog.spacing))) { normalized in
                     gate(.interpolatingSpring(
                         duration: 0.38,
                         bounce: 0.15,
@@ -304,7 +315,8 @@ private struct DiskView: View {
 /// ternary modifiers (no branching, identity preserved).
 private struct OrbitCard: View {
     @Bindable var model: CollectionsModel
-    let card: Card
+    let collection: Collection
+    let focus: CollectionFocus
     let index: Int
     let geo: Geo
     let isExpanded: Bool
@@ -314,7 +326,7 @@ private struct OrbitCard: View {
     let onDismissEnd: (DragGesture.Value, Geo) -> Void
 
     var body: some View {
-        let orbitAngle = model.rotation + Double(index) * Geo.spacing
+        let orbitAngle = model.rotation + Double(index) * CollectionCatalog.spacing
         let angle = orbitAngle * .pi / 180
         let full = CGSize(width: geo.size.width, height: geo.size.height)
         let size = isExpanded ? full : CGSize(width: geo.card, height: geo.card)
@@ -329,7 +341,7 @@ private struct OrbitCard: View {
             ? geo.screenCorner + (geo.collapsedCorner - geo.screenCorner) * (1 - fade)
             : geo.collapsedCorner
 
-        CardFace(card: card, size: size, corner: corner, isExpanded: isExpanded, contentOpacity: fade, geo: geo)
+        CardFace(collection: collection, focus: focus, size: size, corner: corner, isExpanded: isExpanded, contentOpacity: fade, geo: geo)
             .overlay {
                 RoundedRectangle(cornerRadius: corner)
                     .stroke(.white.opacity(isExpanded ? 0 : 0.2), lineWidth: 1)
@@ -348,7 +360,7 @@ private struct OrbitCard: View {
                     .onChanged { onDismissChange($0.translation) }
                     .onEnded { onDismissEnd($0, geo) }
             )
-            .accessibilityLabel(card.name)
+            .accessibilityLabel(Text(collection.title))
             .accessibilityHint(isExpanded ? "Swipe up to dismiss" : "Double tap to open")
             .accessibilityAddTraits(isExpanded ? [] : .isButton)
     }
@@ -359,7 +371,8 @@ private struct OrbitCard: View {
 /// Static content: image, material scrim, title, and (when expanded) pager.
 /// Inputs never change during disk drags, so re-evaluation diffs to nothing.
 private struct CardFace: View {
-    let card: Card
+    let collection: Collection
+    let focus: CollectionFocus
     let size: CGSize
     let corner: CGFloat
     let isExpanded: Bool
@@ -368,7 +381,7 @@ private struct CardFace: View {
 
     var body: some View {
         ZStack {
-            Image(card.imageName)
+            Image(collection.background)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: size.width, height: size.height)
@@ -377,13 +390,13 @@ private struct CardFace: View {
             ZStack(alignment: isExpanded ? .top : .bottom) {
                 scrim
                 if isExpanded {
-                    LoopPager(items: card.items, size: size)
+                    CollectionTaskPager(tasks: collection.tasks, focus: focus)
                         .padding(.top, max(48, size.height * 0.12))
                         .padding(.bottom, max(72, size.height * 0.12))
                         .opacity(contentOpacity)
                         .transition(.opacity)
                 }
-                Text(card.name)
+                Text(collection.title)
                     .font(.system(size: isExpanded ? 50 : 25, design: .serif))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
@@ -411,78 +424,6 @@ private struct CardFace: View {
                 endRadius: size.width * 0.9
             )
         )
-    }
-}
-
-// MARK: - Infinite Pager
-
-/// Three recycled pages (previous/current/next) instead of a thousand-view
-/// TabView window: constant memory, no rebase hacks, native paging feel via
-/// a velocity-projected snappy settle.
-private struct LoopPager: View {
-    let items: [CollectionItem]
-    let size: CGSize
-    @State private var index = 0
-    @State private var drag: CGFloat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let count = max(items.count, 1)
-        HStack(spacing: 0) {
-            Page(item: items[(index - 1 + count) % count], size: size)
-            Page(item: items[index % count], size: size)
-            Page(item: items[(index + 1) % count], size: size)
-        }
-        .frame(width: size.width * 3, alignment: .leading)
-        .offset(x: -size.width + drag)
-        .animation(
-            UIConstants.Animation.motionGate(UIConstants.Animation.snappySpring, reduceMotion: reduceMotion),
-            value: index
-        )
-        .gesture(
-            DragGesture(minimumDistance: 12, coordinateSpace: .local)
-                .onChanged { value in
-                    guard count > 1 else { return }
-                    drag = abs(value.translation.width) > abs(value.translation.height)
-                        ? value.translation.width : 0
-                }
-                .onEnded { value in
-                    guard count > 1 else { return }
-                    let step: Int
-                    if value.translation.width < -size.width * 0.25 || value.velocity.width < -700 {
-                        step = 1
-                    } else if value.translation.width > size.width * 0.25 || value.velocity.width > 700 {
-                        step = -1
-                    } else {
-                        step = 0
-                    }
-                    drag = 0
-                    if step != 0 { index = (index + step + count * 1024) % count }
-                }
-        )
-        .sensoryFeedback(.selection, trigger: index)
-        .accessibilityElement(children: .contain)
-    }
-}
-
-private struct Page: View {
-    let item: CollectionItem
-    let size: CGSize
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text(item.emoji)
-                .font(.system(size: min(size.width * 0.34, 150)))
-            Text(item.task)
-                .font(.system(.title2, design: .serif))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .padding(.horizontal, 24)
-        }
-        .frame(width: size.width, height: size.height)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.name), \(item.task)")
     }
 }
 
