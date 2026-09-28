@@ -1,23 +1,32 @@
 import SwiftUI
 import UIKit
 
-/// One blob character: field speed, wobble amount, size fraction.
+/// One blob character: field speed and wobble amount. Size and leg lengths
+/// live in `UIConstants.Breathe`, which owns the whole breath vocabulary.
 private struct BreathParams {
     var speed: Double
     var displacement: Double
-    var radius: Double
 }
 
 private enum BreathStates {
-    static let neutral = BreathParams(speed: 0.5, displacement: 0.15, radius: 0.25)
-    static let a = BreathParams(speed: 0.8, displacement: 0.30, radius: 0.30)
-    static let b = BreathParams(speed: 1.3, displacement: 0.50, radius: 0.15)
+    static let neutral = BreathParams(speed: 0.5, displacement: 0.15)
+    static let a = BreathParams(speed: 0.8, displacement: 0.30)
+    static let b = BreathParams(speed: 1.3, displacement: 0.50)
 }
 
 /// Breathe page: the neutral resting blob, draggable.
-/// A still hold plays ticks → pause → thump, then morphs to excited + state A.
-/// Letting go starts the breathing loop (4 s A→B, 7 s dwell, 8 s B→A).
-/// Holding again at any point reverses back to the separate neutral state.
+/// Touching it at all tenses it to 80% under the finger, and the blob
+/// rubberbands under a moving finger from that same touch — holding and
+/// dragging are one gesture, not a choice between two. Holding still ramps a
+/// continuous hum over 0.75 s, falls silent for 0.25 s, and thumps — one
+/// second in, and the state flips on the thump to excited + A. Letting go
+/// before that costs nothing. Letting go after it starts the breathing loop
+/// (inhale → hold → exhale; leg lengths and sizes all live in
+/// `UIConstants.Breathe`), which spells the phase as a word above the blob for
+/// the first `breathePromptCycles` cycles and then focuses it back out. The
+/// blob keeps the middle of the screen and the word sits above it, anchored
+/// to it. Holding again at any point reverses back out on the same ramp run
+/// backwards, and kills the cycle.
 struct BreatheView: View {
     @Environment(BreathingState.self) private var breathing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,9 +34,16 @@ struct BreatheView: View {
     @State private var isExcited = false
     @State private var speed = BreathStates.neutral.speed
     @State private var displacement = BreathStates.neutral.displacement
-    @State private var radiusFraction = BreathStates.neutral.radius
+    @State private var radiusFraction = UIConstants.Breathe.breatheRestingSize
 
     @State private var atB = false
+    @State private var prompt = BreathPrompt.resting
+    /// How much of its size the blob keeps while a finger is on it — 1 when
+    /// untouched. A multiplier on the radius rather than a size of its own, so
+    /// it composes with the breathing cycle instead of fighting it: a hold
+    /// started mid-exhale tenses from wherever the cycle has got to, and
+    /// letting go hands the size straight back.
+    @State private var pressScale: CGFloat = 1
     @State private var displacementDuration = 0.25
     @State private var radiusDuration = 0.25
     @State private var speedDuration = 0.25
@@ -36,21 +52,37 @@ struct BreatheView: View {
     @State private var cycleTask: Task<Void, Never>?
     @State private var awaitingRelease = false
     @State private var progressStart: Date? = nil
-    @State private var progressDuration = 4.0
+    @State private var progressDuration = UIConstants.Breathe.breatheInhaleDuration
     /// 0 = blob follows the finger 1:1, 100 = blob stays pinned.
     private let damping = 80.0
-    /// Movement beyond this means it was a drag, not a hold.
-    private static let moveThreshold = 12.0
     private static let morphDuration = 0.25
+    /// How small the blob draws under a finger. Applied to whatever size it
+    /// currently is, so it reads as this blob holding itself in rather than
+    /// some other size being swapped in.
+    private static let pressedSize: CGFloat = 0.8
+    /// The whole entrance commitment, however it is split: ramp, then silence,
+    /// then thump. Fixed, so tuning the ramp trades it against the silence
+    /// rather than making the hold longer or shorter. Read the remainder as
+    /// `holdDuration - ramp.rampDuration`; a ramp that fills the whole
+    /// commitment leaves no gap, which is a legitimate thing to hear.
+    private static let holdDuration: TimeInterval = 1.0
 
-    /// Shared generators — created once (Apple HIG).
-    private let tick = UIImpactFeedbackGenerator(style: .medium)
+    /// Shared generators — created once (Apple HIG). The thump is now the only
+    /// discrete impact left in the app: both holds ramp and both fall silent, so
+    /// the thump is the only moment that lands as a single hit.
     private let thump = UIImpactFeedbackGenerator(style: .heavy)
+    private let ramp = HoldRamp()
+
+    /// The blob tenses and lets go on the commit character rather than the morph
+    /// one — this is the touch answering back, and it should read as immediate.
+    private var pressSpring: Animation {
+        UIConstants.Animation.motionGate(UIConstants.Animation.snappySpring, reduceMotion: reduceMotion)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let minDimension = min(proxy.size.width, proxy.size.height)
-            let radius = minDimension * radiusFraction
+            let radius = minDimension * radiusFraction * pressScale
             ZStack {
                 Color.black.ignoresSafeArea()
                 BlobView(
@@ -66,14 +98,23 @@ struct BreatheView: View {
                     radiusDuration: radiusDuration,
                     speed: reduceMotion ? 0 : speed,
                     speedDuration: speedDuration,
-                    blur: 25,
+                    blur: UIConstants.Breathe.breatheLayerBlur,
                     rimWidth: isExcited ? 1.4 : 0.7,
-                    cometWidth: 1.5,
+                    cometWidth: UIConstants.Breathe.breatheTimerWidth,
                     progressStart: progressStart,
                     progressDuration: progressDuration
                 )
                 .offset(offset)
                 .allowsHitTesting(false)
+                // Anchored to the blob, not the screen: the same translation the
+                // blob gets, plus a fixed lift off its centre. The blob keeps the
+                // middle of the screen to itself, so the word sits above it at
+                // the derived distance however it is dragged.
+                BreathPromptView(prompt: prompt)
+                    .offset(
+                        x: offset.width,
+                        y: offset.height - UIConstants.Breathe.breathePromptAnchor
+                    )
             }
             // The hitbox lives in the overlay: it can overflow the page as
             // the blob grows without ever contributing to layout size, and
@@ -90,10 +131,12 @@ struct BreatheView: View {
                                     fingerDown = true
                                     startHold()
                                 }
-                                if hypot(value.translation.width, value.translation.height) > Self.moveThreshold {
-                                    // It was a drag — the hold sequence never runs.
-                                    cancelHold()
-                                }
+                                // Dragging and holding are the same gesture here,
+                                // not a choice between two. The hold is already
+                                // running, so the blob rubberbands under a moving
+                                // finger without disturbing the sequence — and
+                                // keeps doing so once the thump has armed it, for
+                                // as long as the finger stays down.
                                 let t = value.translation
                                 offset = CGSize(width: t.width * followFactor, height: t.height * followFactor)
                             }
@@ -112,6 +155,7 @@ struct BreatheView: View {
             .clipped()
         }
         .background(.black)
+        .onAppear { ramp.prepare() }
         .accessibilityLabel("Breathe")
     }
 
@@ -124,7 +168,7 @@ struct BreatheView: View {
     /// Retargets every continuous parameter at once. Tint, wobble, and size
     /// ease on the render clock; speed is integrated, so it bends smoothly
     /// by construction. One synchronous commit — the journeys retarget together.
-    private func goTo(speed: Double, displacement: Double, radius: Double, excited: Bool, tempoDuration: Double, wobbleDuration: Double, sizeDuration: Double) {
+    private func goTo(speed: Double, displacement: Double, radius: CGFloat, excited: Bool, tempoDuration: Double, wobbleDuration: Double, sizeDuration: Double) {
         speedDuration = tempoDuration
         displacementDuration = wobbleDuration
         radiusDuration = sizeDuration
@@ -136,24 +180,38 @@ struct BreatheView: View {
 
     // MARK: - Still-hold sequence
 
-    /// Neutral → 10 accelerating ticks (0.5 s) → 0.5 s pause → thump, and
-    /// state flips exactly on the thump → excited + A. Excited → the mirror
-    /// → neutral state, killing the cycle. Nothing changes before the thump,
-    /// so pre-thump cancels revert nothing.
+    /// Either way: the blob tenses, a continuous hum ramps (0.75 s), 0.25 s of
+    /// silence, then the thump — and the state flips exactly on the thump. The
+    /// exit runs the same ramp inverted, so unwinding is the entrance backwards
+    /// rather than a separate gesture. Nothing changes before the thump, so
+    /// pre-thump cancels revert nothing but the hum and the tension.
     private func startHold() {
         holdTask?.cancel()
-        tick.prepare()
         thump.prepare()
         let forward = !isExcited
+        // A touch tenses the blob whichever way the hold is headed — the haptic
+        // is what says which one this is, not the size.
+        withAnimation(pressSpring) { pressScale = Self.pressedSize }
+        ramp.start(direction: forward ? .enter : .exit)
         holdTask = Task {
-            await playTicks(ascending: forward)
+            // The pattern runs the whole ramp itself; the task owns only the
+            // silence after it, so the thump lands out of quiet. The remainder
+            // of the one-second commitment is the silence, and it is the same
+            // length in both directions — so the thump always lands one second
+            // in, and reversing out is timed exactly like committing.
+            try? await Task.sleep(for: .seconds(HoldRamp.rampDuration))
             if Task.isCancelled { return }
-            try? await Task.sleep(for: .seconds(0.5))
+            ramp.stop()
+            try? await Task.sleep(for: .seconds(max(0, Self.holdDuration - HoldRamp.rampDuration)))
             if Task.isCancelled { return }
             thump.impactOccurred()
+            // The thump lets go as well as puffing out, so the size it lands on
+            // is the real one and not 80% of it. Both directions do this, which
+            // is why it sits above the fork.
+            withAnimation(pressSpring) { pressScale = 1 }
             if forward {
                 atB = false
-                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: BreathStates.a.radius, excited: true, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
+                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: UIConstants.Breathe.breatheExhaleSize, excited: true, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
                 // Excited owns the screen: ambient hides via focus, paging
                 // locks and other pages go hit-test/a11y-dark via isBreathing
                 // (offscreen pages are already stripped in PageView).
@@ -166,7 +224,11 @@ struct BreatheView: View {
                 awaitingRelease = false
                 atB = false
                 progressStart = nil
-                goTo(speed: BreathStates.neutral.speed, displacement: BreathStates.neutral.displacement, radius: BreathStates.neutral.radius, excited: false, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
+                // Recede on the way out too, and blank the word so the next
+                // session's first word is a change and cascades in fresh.
+                Focus.hide(.prompt)
+                prompt = .resting
+                goTo(speed: BreathStates.neutral.speed, displacement: BreathStates.neutral.displacement, radius: UIConstants.Breathe.breatheRestingSize, excited: false, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
                 breathing.isBreathing = false
                 Focus.visible(.ambient)
             }
@@ -174,50 +236,55 @@ struct BreatheView: View {
         }
     }
 
-    /// Geometric tick train over exactly 0.5 s. Forward accelerates and
-    /// brightens; reverse is the mirror — decelerating and softening.
-    /// State flips at the thump that follows, never before.
-    private func playTicks(ascending: Bool) async {
-        let count = 10
-        let ratio = ascending ? 0.85 : 1.0 / 0.85
-        let total = ascending
-            ? (1.0 - pow(ratio, Double(count))) / (1.0 - ratio)
-            : (pow(ratio, Double(count)) - 1.0) / (ratio - 1.0)
-        for i in 0..<count {
-            if Task.isCancelled { return }
-            let progress = Double(i) / Double(count - 1)
-            tick.impactOccurred(intensity: ascending ? 0.4 + 0.6 * progress : 1.0 - 0.6 * progress)
-            try? await Task.sleep(for: .seconds(0.5 * pow(ratio, Double(i)) / total))
-        }
-    }
-
     private func cancelHold() {
         holdTask?.cancel()
         holdTask = nil
+        // Lifting early costs nothing but the tension: the hum stops where it
+        // is, and the blob lets itself back out to the size it was.
+        ramp.stop()
+        withAnimation(pressSpring) { pressScale = 1 }
     }
 
-    // MARK: - Breathing loop: 4 s A→B, 7 s dwell, 8 s B→A
+    // MARK: - Breathing loop: inhale → hold → exhale
 
     private func startCycle() {
+        let inhale = UIConstants.Breathe.breatheInhaleDuration
+        let hold = UIConstants.Breathe.breatheHoldDuration
+        let exhale = UIConstants.Breathe.breatheExhaleDuration
         cycleTask?.cancel()
         cycleTask = Task {
+            var coached = 0
             while true {
                 if Task.isCancelled { return }
                 atB = true
+                prompt = .inhale
+                // The word has to exist before the layer materializes, or the
+                // prompt focuses in empty — hence here rather than on the thump,
+                // which would hold a blank word for as long as the finger is down.
+                if coached == 0 { Focus.visible(.prompt) }
                 progressStart = .now
-                progressDuration = 4
-                goTo(speed: BreathStates.b.speed, displacement: BreathStates.b.displacement, radius: BreathStates.b.radius, excited: true, tempoDuration: 4, wobbleDuration: 4, sizeDuration: 4)
-                try? await Task.sleep(for: .seconds(4))
+                progressDuration = inhale
+                goTo(speed: BreathStates.b.speed, displacement: BreathStates.b.displacement, radius: UIConstants.Breathe.breatheInhaleSize, excited: true, tempoDuration: inhale, wobbleDuration: inhale, sizeDuration: inhale)
+                try? await Task.sleep(for: .seconds(inhale))
                 if Task.isCancelled { return }
+                prompt = .hold
                 progressStart = .now
-                progressDuration = 7
-                try? await Task.sleep(for: .seconds(7))
+                progressDuration = hold
+                try? await Task.sleep(for: .seconds(hold))
                 if Task.isCancelled { return }
                 atB = false
+                prompt = .exhale
                 progressStart = .now
-                progressDuration = 8
-                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: BreathStates.a.radius, excited: true, tempoDuration: 8, wobbleDuration: 8, sizeDuration: 8)
-                try? await Task.sleep(for: .seconds(8))
+                progressDuration = exhale
+                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: UIConstants.Breathe.breatheExhaleSize, excited: true, tempoDuration: exhale, wobbleDuration: exhale, sizeDuration: exhale)
+                try? await Task.sleep(for: .seconds(exhale))
+                if Task.isCancelled { return }
+                // Counted after the exhale, so the word stays up for the whole
+                // of the final coached cycle and recedes at the seam.
+                coached += 1
+                if coached == UIConstants.Breathe.breathePromptCycles {
+                    Focus.hide(.prompt)
+                }
             }
         }
     }

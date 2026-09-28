@@ -3,19 +3,25 @@ import SwiftUI
 
 /// Pages in Lumen's cross-shaped map: Home at the center, one neighbor per edge.
 enum LumenPage: Int, CaseIterable, Identifiable, Sendable, Equatable {
-    case memory, home, breathe, collections
+    case memory, home, breathe, collections, room
 
     var id: Int { rawValue }
 
     var column: Int {
         switch self {
         case .memory: 0
-        case .home, .collections: 1
+        case .home, .collections, .room: 1
         case .breathe: 2
         }
     }
 
-    var row: Int { self == .collections ? 1 : 0 }
+    var row: Int {
+        switch self {
+        case .room: -1
+        case .collections: 1
+        default: 0
+        }
+    }
 
     init?(column: Int, row: Int) {
         switch (column, row) {
@@ -23,6 +29,7 @@ enum LumenPage: Int, CaseIterable, Identifiable, Sendable, Equatable {
         case (1, 0): self = .home
         case (2, 0): self = .breathe
         case (1, 1): self = .collections
+        case (1, -1): self = .room
         default: return nil
         }
     }
@@ -33,6 +40,7 @@ enum LumenPage: Int, CaseIterable, Identifiable, Sendable, Equatable {
         case .home: "Home"
         case .breathe: "Breathe"
         case .collections: "Collections"
+        case .room: "Room"
         }
     }
 }
@@ -64,12 +72,13 @@ struct PagingMetrics: Equatable {
         case .memory: x = -stepX ... 0
         case .home: x = -stepX ... stepX
         case .breathe: x = 0 ... stepX
-        case .collections: x = 0 ... 0
+        case .collections, .room: x = 0 ... 0
         }
         let y: ClosedRange<CGFloat>
         switch page {
-        case .home: y = -stepY ... 0
+        case .home: y = -stepY ... stepY
         case .collections: y = 0 ... stepY
+        case .room: y = -stepY ... 0
         case .memory, .breathe: y = 0 ... 0
         }
         return (x, y)
@@ -276,7 +285,7 @@ struct CoreNavigation: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Pages")
         .accessibilityValue("\(controller.currentPage.title), \(controller.currentPage.rawValue + 1) of \(LumenPage.allCases.count)")
-        .accessibilityHint("Swipe up or down to move between pages")
+        .accessibilityHint("Swipe to move between pages")
         .accessibilityAdjustableAction { direction in
             step(direction == .increment ? 1 : -1)
         }
@@ -395,6 +404,7 @@ private struct PageView: View, Equatable {
         case .home: HomeView()
         case .breathe: BreatheView()
         case .collections: CollectionsView(collectionsExpanded: $collectionsExpanded, pageSize: size)
+        case .room: RoomView()
         }
     }
 }

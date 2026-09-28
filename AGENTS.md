@@ -156,6 +156,8 @@ After implementation, always follow this workflow:
 5. Ensure the app launches successfully and does not crash.
 6. Exit once the above verification is complete.
 
+Trivial changes whose correctness is fully established at compile time (for example, adding a case to an exhaustive switch that the compiler enforces) are verified by a successful build alone; no install-and-run is required unless the change introduces runtime behavior that compilation cannot establish.
+
 Use the available Xcode MCP and `device-interaction` capabilities when appropriate for device discovery, installation, and execution.
 
 Do not assume a particular device model. Always discover the currently available targets.
@@ -175,7 +177,9 @@ Only perform this workflow when the user specifically asks for a screenshot.
 5. Save/upload the screenshot to the project's `Screenshots` folder.
 6. Exit.
 
-Do not perform screenshot or image analysis. Do not expect the model to interpret screenshots.
+Any screen capture, image interpretation, or UI-hierarchy/gesture interaction outside an explicit screenshot request is an error. There is no verification path that uses screenshots or UI-hierarchy/gesture tooling: the Final Verification Workflow and Debugging Discipline never require them, and the Screenshot Workflow is the only workflow that touches a screen's pixels — and only on explicit request.
+
+Do not expect the model to interpret screenshots.
 
 Do not attach screenshots or other files to the conversation unless the user explicitly asks for them or they are genuinely required for debugging a problem or build failure.
 
@@ -221,3 +225,12 @@ A task is complete when the requested implementation is finished, the project bu
 For UI tasks, correctness includes native platform behavior, visual quality, accessibility, performance, and appropriate Apple design conventions.
 
 Do not add unnecessary work after the task has successfully met these requirements.
+
+## Scope Discipline
+
+The workflows above describe the maximum required verification, not a menu of options. Once the task meets the Completion Standard, stop.
+
+* The Completion Standard is an exit condition, not a starting point. A successful build that satisfies it is the end of the task, not an invitation to further verification, navigation, screenshots, or inspection.
+* Do not open a device-interaction, Simulator, or screen-capture session for routine verification of an already-successful build.
+* Before issuing any Simulator, device, screenshot, or UI-hierarchy tool call, name the section of AGENTS.md that authorizes it. If no section authorizes it, do not make the call.
+* When unsure whether a step is in scope, do not guess upward. Take the smallest sanctioned step and stop.
