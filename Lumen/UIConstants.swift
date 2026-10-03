@@ -3,7 +3,6 @@ import SwiftUI
 
 enum UIConstants {
     enum General {
-        static let screenCornerRadius: CGFloat = 40
         static let safeSpace: CGFloat = 15
     }
 
@@ -107,5 +106,25 @@ enum UIConstants {
         /// Full inhale → hold → exhale cycles the word coaches before the blob
         /// breathes alone. Past this the prompt has done its job.
         static let breathePromptCycles: Int = 2
+    }
+}
+
+// MARK: - Screen geometry
+
+extension GeometryProxy {
+    /// The largest of the four corner radii SwiftUI resolves for this view's
+    /// bounds against its container shape — the container's own radius less the
+    /// distance from each of this view's corners to it.
+    ///
+    /// On a view whose corners sit on the screen container's corners that
+    /// distance is zero, so the largest of the four is the screen's radius. Read
+    /// from an inset view it is that view's concentric radius instead, which is
+    /// the point: one value, correctly measured wherever it is taken from.
+    ///
+    /// `0` when no container shape is set, or the container shape carries no
+    /// corner information — nothing was resolved, so there is no radius to read.
+    var screenCornerRadius: CGFloat {
+        guard let radii = concentricCornerRadii else { return 0 }
+        return max(radii.topLeading, radii.topTrailing, radii.bottomLeading, radii.bottomTrailing)
     }
 }

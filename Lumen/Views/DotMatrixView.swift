@@ -21,6 +21,10 @@ private enum DotMatrixConstants {
 struct DotMatrixView: View {
     /// Extra dot diameter (pt) at the wave crest.
     var rippleScale: CGFloat = DotMatrixConstants.rippleScale
+    /// Whether the ripple may run. Off-live pages hold a still frame, so the
+    /// display link stops instead of redrawing a blurred page nobody can see.
+    /// Phase derives from the timeline date, so resume causes no jump.
+    var isLive: Bool = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -35,7 +39,7 @@ struct DotMatrixView: View {
             }
             .accessibilityHidden(true)
         } else {
-            TimelineView(.animation) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isLive)) { timeline in
                 Canvas(opaque: true, rendersAsynchronously: false) { context, size in
                     DotMatrixField.draw(
                         context: context,

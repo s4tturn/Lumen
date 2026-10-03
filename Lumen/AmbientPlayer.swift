@@ -22,24 +22,51 @@ struct AmbientPlayer: View {
     @State private var highlightedSourceID: AmbientSource.ID?
     @State private var cardFrames: [AmbientSource.ID: CGRect] = [:]
     @State private var containerWidth: CGFloat = 0
+    /// The screen's own corner radius, read here — and only here — because this
+    /// is the outermost point in the tree still resolving against the screen
+    /// container. Inside the band the container is `bandShape`, so a radius read
+    /// below that line would come back band-relative.
+    @State private var screenCornerRadius: CGFloat = 0
     @State private var hapticTrigger = 0
 
     private enum Metrics {
         static let lockThreshold: CGFloat = 8
         static let tapMaxMovement: CGFloat = 12
+        // Outer inset of the expanded band: how far the band itself sits from the
+        // screen's edge. Single value so the band's width, its bottom inset and
+        // the gesture area's reach can never drift apart.
+        static let expandedOuterPadding: CGFloat = 5
         // Single inner inset for the expanded band: horizontal and bottom
         // read from the same value so they can never drift apart.
-        static let expandedInnerPadding: CGFloat = 12
+        static let expandedInnerPadding: CGFloat = 5
         static let completeWidth: CGFloat = 128
         static let completedWidth: CGFloat = 136
         static let trashDiameter: CGFloat = 48
         static let pillHeight: CGFloat = 48
         static let volumeHeight: CGFloat = 44
-        static let cardCornerRadius: CGFloat = UIConstants.General.screenCornerRadius - 24
+        /// The floor under each row's concentric radius: the screen's own radius
+        /// less exactly the distance a row sits from the screen's edge — the
+        /// band's outer inset, then the band's inner padding. A row at the
+        /// screen's corner would resolve that radius on its own; this is the same
+        /// number, handed to rows further in so the curvature never drops away.
+        ///
+        /// Clamped at zero because the screen radius is zero until SwiftUI
+        /// resolves it, and a negative minimum is not a corner style.
+        static func rowCornerRadius(screenRadius: CGFloat) -> CGFloat {
+            max(0, screenRadius - expandedOuterPadding - expandedInnerPadding)
+        }
         static let pillShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
-        static let bandShape = RoundedRectangle(
-            cornerRadius: UIConstants.General.screenCornerRadius - 8, style: .continuous
-        )
+        /// The band's own radius, and the floor under it: the screen's radius
+        /// less the band's outer inset — the distance between the band's corner
+        /// and the screen's. Concentric resolution would arrive at this number
+        /// on its own; stating it means the band still curves at corners the
+        /// screen's curve never reaches, and means the glass, the hit area and
+        /// the published container all read one value instead of three.
+        ///
+        /// Clamped at zero for the same reason as the row floor below.
+        static func bandCornerRadius(screenRadius: CGFloat) -> CGFloat {
+            max(0, screenRadius - expandedOuterPadding)
+        }
     }
 
     private func motion(_ base: Animation) -> Animation {
@@ -61,7 +88,7 @@ struct AmbientPlayer: View {
     private var compactWidth: CGFloat { engine.isPlaying ? measuredWidth * 0.5 : 50 }
     private var volumeWidth: CGFloat { measuredWidth * 0.7 }
     private var bottomPadding: CGFloat {
-        state == .expanded ? UIConstants.General.safeSpace : 32
+        state == .expanded ? Metrics.expandedOuterPadding : 32
     }
     /// The transport is off for exactly as long as a collection is open: the
     /// focus is non-`nil` for the card's whole lifetime, so one signal covers
@@ -109,6 +136,7 @@ struct AmbientPlayer: View {
         .coordinateSpace(name: "AmbientPlayer")
         .onPreferenceChange(SourceCardFrameKey.self) { cardFrames = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.screenCornerRadius } action: { screenCornerRadius = $0 }
         .sensoryFeedback(.selection, trigger: hapticTrigger)
     }
 
@@ -172,7 +200,7 @@ struct AmbientPlayer: View {
         .contentShape(Metrics.pillShape)
         .accessibilityLabel("Complete")
         // Which task, announced: the button acts on one specific task, and the
-        // card holding it is not where VoiceOver\u2019s focus is.
+        // card holding it is not where VoiceOver’s focus is.
         .accessibilityValue(Text(task.title))
         .accessibilityAddTraits(.isButton)
         .glassEffect(.clear.interactive(), in: Metrics.pillShape)
@@ -217,7 +245,8 @@ struct AmbientPlayer: View {
     }
 
     private var expandedBand: some View {
-        VStack(alignment: .center, spacing: 0) {
+        let bandCornerRadius = Metrics.bandCornerRadius(screenRadius: screenCornerRadius)
+        return VStack(alignment: .center, spacing: 0) {
             Text("Ambient Sources")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.white)
@@ -229,9 +258,9 @@ struct AmbientPlayer: View {
                 ForEach(AmbientSource.all) { source in
                     SourceCard(
                         source: source,
-                        cornerRadius: Metrics.cardCornerRadius,
                         isPlaying: engine.currentSource?.id == source.id,
-                        isHovered: highlightedSourceID == source.id
+                        isHovered: highlightedSourceID == source.id,
+                        cornerRadius: Metrics.rowCornerRadius(screenRadius: screenCornerRadius)
                     )
                     .background {
                         GeometryReader { geo in
@@ -251,14 +280,38 @@ struct AmbientPlayer: View {
         // identical inner padding on all sides) instead of compressing it
         // into a rigid frame and eating the bottom inset.
         .frame(
-            width: measuredWidth - 2 * UIConstants.General.safeSpace,
+            width: measuredWidth - 2 * Metrics.expandedOuterPadding,
             alignment: .top
         )
-        .contentShape(Metrics.bandShape)
-        .glassEffect(.clear.interactive(), in: Metrics.bandShape)
+        // The band publishes its own glass geometry as the rows' container.
+        // Same radius as the glass below, so rows share the glass's center and
+        // nest by inset: the band's radius less the 5pt inner padding at its
+        // corners, and no more than that further in.
+        //
+        // The container is the one surface that could not be a
+        // `ConcentricRectangle` even if we wanted it: `containerShape` takes a
+        // `RoundedRectangularShape`, which `ConcentricRectangle` does not
+        // conform to (Shape only). It carries the same radius as a fixed rounded
+        // rectangle, so the three surfaces agree on one number and only the
+        // glass additionally pins per-corner variation out — see below.
+        .containerShape(RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous))
+        .contentShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(bandCornerRadius))))
+        // The glass itself takes a FIXED rounded rectangle, not a concentric one,
+        // even though it shares the concentric radius above. Apple's Liquid Glass
+        // examples only ever place fixed shapes in `glassEffect(in:)`: a
+        // container-relative shape there does not resolve on the interactive
+        // layer, and the material falls back to capsule-like geometry — a second,
+        // hyper-rounded pill reads inside the band. `.interactive()` is what
+        // surfaces it. The radius is still the concentric one, so the band's
+        // curve is unchanged; only the spelling differs, and the container and
+        // hit area above keep the concentric form because neither renders glass.
+        .glassEffect(
+            .clear.interactive(),
+            in: RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous)
+        )
         .glassEffectID("expanded", in: morphNamespace)
         .glassEffectTransition(morphTransition)
-        .padding(.bottom, UIConstants.General.safeSpace)
+        .padding(.bottom, Metrics.expandedOuterPadding)
     }
 
     private func toggle() {
@@ -436,13 +489,39 @@ private struct VolumePill: View {
 
 private struct SourceCard: View {
     let source: AmbientSource
-    let cornerRadius: CGFloat
     let isPlaying: Bool
     let isHovered: Bool
+    /// Floor under this row's concentric radius, derived once by the band from
+    /// the screen's radius and both of the band's insets.
+    let cornerRadius: CGFloat
+
+    /// Row body. `ConcentricRectangle` against the band's published container,
+    /// floored at `cornerRadius`: rows near the band's corners resolve the
+    /// container's own radius less the inset, and rows further in — where that
+    /// reaches zero — keep the screen's curve instead of squaring off.
+    private var cardShape: ConcentricRectangle {
+        ConcentricRectangle(corners: .concentric(minimum: .fixed(cornerRadius)))
+    }
+    /// State layers (playing tint, hover lift, hover ring). Same container,
+    /// same frame and same floor as the body, so a state layer can never render
+    /// less round than the surface it sits on and detach from its corners.
+    private var highlightShape: ConcentricRectangle {
+        ConcentricRectangle(
+            corners: .concentric(minimum: .fixed(cornerRadius)),
+            isUniform: false
+        )
+    }
+    /// Icon tile, concentric in spelling. Fixed radius ignores the container,
+    /// so this renders exactly the historical 5pt tile — now in the same
+    /// shape family as every other layer in the card.
+    private static let iconShape = ConcentricRectangle(
+        corners: .fixed(5),
+        isUniform: true
+    )
 
     var body: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            Self.iconShape
                 .fill(source.color.opacity(0.85))
                 .frame(width: 40, height: 40)
                 .overlay {
@@ -470,20 +549,17 @@ private struct SourceCard: View {
             // Base + highlight A (playing: source-color tint) + highlight B
             // (hovered: white lift) as additive layers — a playing source
             // under the finger shows A + B combined.
-            RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
+            cardShape
                 .fill(.white.opacity(0.15))
                 .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
-                        .fill(source.color.opacity(isPlaying ? 0.3 : 0))
+                    highlightShape.fill(source.color.opacity(isPlaying ? 0.3 : 0))
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
-                        .fill(.white.opacity(isHovered ? 0.15 : 0))
+                    highlightShape.fill(.white.opacity(isHovered ? 0.15 : 0))
                 }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
-                .stroke(.white.opacity(isHovered ? 0.5 : 0), lineWidth: 1.5)
+            highlightShape.stroke(.white.opacity(isHovered ? 0.5 : 0), lineWidth: 1.5)
         }
         .scaleEffect(isHovered ? 1.02 : 1)
     }

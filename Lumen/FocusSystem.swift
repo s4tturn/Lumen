@@ -92,9 +92,18 @@ struct FocusEffect: ViewModifier {
     func body(content: Content) -> some View {
         let motion = UIConstants.Animation.motionGate(state.animation, reduceMotion: reduceMotion)
         let fade = UIConstants.Animation.motionGate(state.animation, reduceMotion: reduceMotion)
-        content
-            .compositingGroup()
-            .blur(radius: state.blur)
+        Group {
+            if state.blur > 0 {
+                // Offscreen only when there is a blur to isolate: Navigation
+                // sits `.visible` for the whole session after launch, and a
+                // full-screen compositing group is real GPU memory for nothing.
+                content
+                    .compositingGroup()
+                    .blur(radius: state.blur)
+            } else {
+                content
+            }
+        }
             .scaleEffect(state.scale, anchor: anchor)
             .animation(motion, value: state)
             .opacity(state.opacity)

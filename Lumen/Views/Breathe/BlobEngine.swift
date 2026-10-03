@@ -44,7 +44,7 @@ struct BlobEngine {
 
     static let maxLayers = 12
 
-    init(seed: UInt64 = 0x11E9A9, wavesPerLayer: Int = 6, samples: Int = 160) {
+    init(seed: UInt64 = 0x11E9A9, wavesPerLayer: Int = 6, samples: Int = 96) {
         self.samples = samples
         // Shared base frequencies keep layers rhyming; per-layer phases,
         // jittered amplitudes, and scaled speeds keep them distinct.
@@ -214,6 +214,10 @@ struct BlobView: View {
     /// duration. Nil while not cycling (neutral, armed) — plain rim instead.
     var progressStart: Date? = nil
     var progressDuration = 4.0
+    /// Whether the field may run. Off-live pages hold a still frame: the
+    /// display link stops, and `fieldTime` accumulates from timeline dates so
+    /// the paused gap contributes no delta and resume causes no jump.
+    var isLive: Bool = true
 
     @State private var engine = BlobEngine()
     /// Accumulated field time: scaled by speed each frame, so moving the
@@ -232,7 +236,7 @@ struct BlobView: View {
     @State private var didSwitch = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isLive)) { timeline in
             Canvas { context, size in
                 guard size.width > 0, size.height > 0 else { return }
                 let now = timeline.date

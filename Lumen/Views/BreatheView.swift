@@ -28,6 +28,10 @@ private enum BreathStates {
 /// to it. Holding again at any point reverses back out on the same ramp run
 /// backwards, and kills the cycle.
 struct BreatheView: View {
+    /// Mirrors the pager's liveness: the blob runs only while settled here or
+    /// the drag is headed here.
+    var isLive: Bool = true
+
     @Environment(BreathingState.self) private var breathing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var offset = CGSize.zero
@@ -102,7 +106,8 @@ struct BreatheView: View {
                     rimWidth: isExcited ? 1.4 : 0.7,
                     cometWidth: UIConstants.Breathe.breatheTimerWidth,
                     progressStart: progressStart,
-                    progressDuration: progressDuration
+                    progressDuration: progressDuration,
+                    isLive: isLive
                 )
                 .offset(offset)
                 .allowsHitTesting(false)

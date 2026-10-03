@@ -22,8 +22,12 @@ import SwiftUI
 /// as a plain tinted rectangle. The matrix _is_ the content layer; there is
 /// no floating chrome to glass.
 struct HomeView: View {
+    /// Mirrors the pager's liveness: the matrix runs only while settled here or
+    /// the drag is headed here.
+    var isLive: Bool = true
+
     var body: some View {
-        DotMatrixView()
+        DotMatrixView(isLive: isLive)
             .background { Color.black.ignoresSafeArea() }
             .overlay { DotMatrixVignette().ignoresSafeArea() }
             .accessibilityLabel("Dot matrix")
