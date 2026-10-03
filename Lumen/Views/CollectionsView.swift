@@ -15,6 +15,10 @@ struct CollectionsView: View {
     /// Complete control acts on what is actually on screen.
     @Environment(CollectionFocus.self) private var focus
     @State private var model = CollectionsModel()
+    /// The screen's own corner radius, handed to every card as its fixed corner
+    /// radius. Starts at zero until SwiftUI resolves it — the same first-frame
+    /// settle `CollectionsModel` already has.
+    @State private var screenCornerRadius: CGFloat = 0
 
     private let pageSize: CGSize
 
@@ -46,6 +50,7 @@ struct CollectionsView: View {
                     geo: geo,
                     isExpanded: expanded == index,
                     anyExpanded: expanded != nil,
+                    cornerRadius: screenCornerRadius,
                     onExpand: expand,
                     onDismissChange: dismissChanged,
                     onDismissEnd: dismissEnded
@@ -53,6 +58,10 @@ struct CollectionsView: View {
             }
         }
         .frame(width: pageSize.width, height: pageSize.height)
+        // The screen's own corner radius, read here because this is the outermost
+        // point in the page still resolving against the screen container — every
+        // card below reads the one number this hands down.
+        .onGeometryChange(for: CGFloat.self) { $0.screenCornerRadius } action: { screenCornerRadius = $0 }
         .coordinateSpace(.named("CollectionsView"))
         .sensoryFeedback(.selection, trigger: model.ridge)
         .sensoryFeedback(.impact, trigger: expanded)
@@ -175,9 +184,7 @@ private struct Geo: Sendable {
     var center: CGPoint { CGPoint(x: size.width / 2, y: size.height) }
     var deadZone: CGFloat { radius * 0.06 }
     var dismissAt: CGFloat { card * 0.15 }
-    var collapsedCorner: CGFloat { card * 0.15 }
     var tick: CGSize { CGSize(width: radius * 0.03, height: radius * 0.125) }
-    var screenCorner: CGFloat { UIConstants.General.screenCornerRadius }
 }
 
 // MARK: - Disk
@@ -321,6 +328,10 @@ private struct OrbitCard: View {
     let geo: Geo
     let isExpanded: Bool
     let anyExpanded: Bool
+    /// Fixed corner radius for the card's stroke, hit area and clip — the
+    /// screen's own radius, so an expanded card's curve continues the display's
+    /// instead of guessing at it.
+    let cornerRadius: CGFloat
     let onExpand: (Int) -> Void
     let onDismissChange: (CGSize) -> Void
     let onDismissEnd: (DragGesture.Value, Geo) -> Void
@@ -337,16 +348,20 @@ private struct OrbitCard: View {
                 y: geo.center.y - geo.orbit * cos(angle)
             )
         let fade = isExpanded ? 1 - min(max(-model.dismiss / geo.dismissAt, 0), 1) : 0
-        let corner = isExpanded
-            ? geo.screenCorner + (geo.collapsedCorner - geo.screenCorner) * (1 - fade)
-            : geo.collapsedCorner
 
-        CardFace(collection: collection, focus: focus, size: size, corner: corner, isExpanded: isExpanded, contentOpacity: fade, geo: geo)
+        CardFace(
+                collection: collection,
+                focus: focus,
+                size: size,
+                isExpanded: isExpanded,
+                contentOpacity: fade,
+                cornerRadius: cornerRadius
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: corner)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(.white.opacity(isExpanded ? 0 : 0.2), lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .rotationEffect(.degrees(isExpanded ? model.landing : orbitAngle))
             .offset(y: model.dismiss)
             .position(position)
@@ -374,10 +389,15 @@ private struct CardFace: View {
     let collection: Collection
     let focus: CollectionFocus
     let size: CGSize
-    let corner: CGFloat
     let isExpanded: Bool
     let contentOpacity: Double
-    let geo: Geo
+    /// Fixed corner radius — the screen's own, so the clip and the scrim carry
+    /// one curve and cannot disagree at the corner.
+    let cornerRadius: CGFloat
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
 
     var body: some View {
         ZStack {
@@ -405,13 +425,13 @@ private struct CardFace: View {
             }
         }
         .frame(width: size.width, height: size.height)
-        .clipShape(RoundedRectangle(cornerRadius: corner))
+        .clipShape(shape)
     }
 
     private var scrim: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: corner).fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: corner).fill(.black.opacity(0.75))
+            shape.fill(.ultraThinMaterial)
+            shape.fill(.black.opacity(0.75))
         }
         .mask(
             RadialGradient(

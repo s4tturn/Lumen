@@ -1,11 +1,30 @@
+import Foundation
 import Observation
 import SwiftUI
 
-/// Pages in Lumen's cross-shaped map: Home at the center, one neighbor per edge.
+// MARK: - The map
+
+/// Lumen's pages: a cross with Home at the centre and one neighbour per edge.
+/// `column`/`row` are the whole geometry of the map — every offset, range and
+/// reachability question in the pager is answered by them.
 enum LumenPage: Int, CaseIterable, Identifiable, Sendable, Equatable {
     case memory, home, breathe, collections, room
 
+    /// Every page, in the order VoiceOver walks them. `rawValue` follows the same
+    /// order, so a page's position in that walk is `rawValue + 1`.
+    static let pages: [LumenPage] = allCases
+
     var id: Int { rawValue }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .memory: "Memory"
+        case .home: "Home"
+        case .breathe: "Breathe"
+        case .collections: "Collections"
+        case .room: "Room"
+        }
+    }
 
     var column: Int {
         switch self {
@@ -34,18 +53,19 @@ enum LumenPage: Int, CaseIterable, Identifiable, Sendable, Equatable {
         }
     }
 
-    var title: String {
-        switch self {
-        case .memory: "Memory"
-        case .home: "Home"
-        case .breathe: "Breathe"
-        case .collections: "Collections"
-        case .room: "Room"
-        }
+    /// Whether the page one step away in this direction exists. The cross has
+    /// no diagonals, so this single question is the whole of its adjacency —
+    /// the drag limits below are read straight off it instead of restating the
+    /// map in a second switch.
+    func hasNeighbor(columnOffset: Int = 0, rowOffset: Int = 0) -> Bool {
+        LumenPage(column: column + columnOffset, row: row + rowOffset) != nil
     }
 }
 
-/// Viewport-derived paging metrics. A value type: cheap, testable, never stale-observed.
+// MARK: - Paging geometry
+
+/// Viewport-derived paging metrics. A value type: cheap, testable, never
+/// stale-observed, and safe to rebuild from the viewport whenever it is needed.
 struct PagingMetrics: Equatable {
     let pageSize: CGSize
     let stepX: CGFloat
@@ -59,29 +79,61 @@ struct PagingMetrics: Equatable {
         stepY = pageSize.height + Self.pageSpacing
     }
 
-    // MARK: - Rubber banding (pure math; called from dragChanged, kept off the
-    // @MainActor controller's observed state path beyond the single dragOffset)
+    /// Where a page sits relative to the page the pager is settled on. Pure
+    /// settled geometry: it carries no drag term, so it changes only when a turn
+    /// is committed — never while the finger is down.
+    func offset(of page: LumenPage, relativeTo origin: LumenPage) -> CGSize {
+        CGSize(
+            width: CGFloat(page.column - origin.column) * stepX,
+            height: CGFloat(page.row - origin.row) * stepY
+        )
+    }
 
-    private static let rubberBandCoefficient: CGFloat = 0.55
+    // MARK: - Rubber banding (pure math; called from `dragChanged`, kept off the
+    // @MainActor controller's observed state path beyond the single `dragOffset`)
 
+    /// How far a drag may travel from `page` on each axis: one step for every
+    /// neighbour that exists, nothing past the edge of the map.
     func validRanges(from page: LumenPage)
         -> (x: ClosedRange<CGFloat>, y: ClosedRange<CGFloat>)
     {
-        let x: ClosedRange<CGFloat>
-        switch page {
-        case .memory: x = -stepX ... 0
-        case .home: x = -stepX ... stepX
-        case .breathe: x = 0 ... stepX
-        case .collections, .room: x = 0 ... 0
+        (
+            axisRange(
+                stepX,
+                backward: page.hasNeighbor(columnOffset: -1),
+                forward: page.hasNeighbor(columnOffset: 1)
+            ),
+            axisRange(
+                stepY,
+                backward: page.hasNeighbor(rowOffset: -1),
+                forward: page.hasNeighbor(rowOffset: 1)
+            )
+        )
+    }
+
+    /// The sign is the whole subtlety, so it is spelled out rather than left to
+    /// the reader: a neighbour one step *forward* is drawn at `+step`, so the
+    /// drag that brings it to centre goes *back* by `-step`. Forward neighbours
+    /// therefore buy travel on the negative side of the range and backward
+    /// neighbours on the positive side — the drag always opposes the neighbour's
+    /// offset, because the stack travels with the finger.
+    private func axisRange(_ step: CGFloat, backward: Bool, forward: Bool) -> ClosedRange<CGFloat> {
+        switch (backward, forward) {
+        case (false, false): 0 ... 0
+        case (true, false): 0 ... step
+        case (false, true): -step ... 0
+        case (true, true): -step ... step
         }
-        let y: ClosedRange<CGFloat>
-        switch page {
-        case .home: y = -stepY ... stepY
-        case .collections: y = 0 ... stepY
-        case .room: y = -stepY ... 0
-        case .memory, .breathe: y = 0 ... 0
-        }
-        return (x, y)
+    }
+
+    /// The drag's resting bounds: beyond them the drag only moves under
+    /// resistance.
+    func clamped(_ translation: CGSize, from page: LumenPage) -> CGSize {
+        let ranges = validRanges(from: page)
+        return CGSize(
+            width: min(max(translation.width, ranges.x.lowerBound), ranges.x.upperBound),
+            height: min(max(translation.height, ranges.y.lowerBound), ranges.y.upperBound)
+        )
     }
 
     func rubberbanded(_ translation: CGSize, from page: LumenPage) -> CGSize {
@@ -103,40 +155,65 @@ struct PagingMetrics: Equatable {
         let sign: CGFloat = distance > 0 ? 1 : -1
         return sign * (1 - 1 / ((abs(distance) * Self.rubberBandCoefficient / dimension) + 1)) * dimension
     }
+
+    private static let rubberBandCoefficient: CGFloat = 0.55
 }
 
-/// Owns the settled page plus the single live drag vector. Live drag never
-/// reaches page bodies: only the container offset reads it (see
-/// `CoreNavigation.body`), so per-sample updates rebuild identical child
-/// values — skipped via `.equatable()` — instead of re-rendering heavyweight
-/// content at gesture frequency.
+// MARK: - Pager state
+
+/// The pager's state: the settled page, the single live drag vector, the
+/// neighbour a drag is headed toward, and the haptic tick that lands with a settle.
 ///
-/// Gesture contract (apple-motion-feel + HIG "handle gestures as responsively
-/// as possible"): track 1:1 with no animation while the finger is down — the
-/// user is the animation (Apple reserves `interactiveSpring` for driven
-/// animations, not finger tracking); decide the target from
-/// `predictedEndTranslation` (velocity projection, not raw distance); settle
-/// with a named preset — `.smooth` for a cancelled drag, zero-bounce
-/// `pageArrival` for a committed turn (paging is arrival: no overshoot).
+/// The animated values have exactly one reader each, and that is what keeps
+/// the pager cheap:
+///
+/// - `dragOffset` is read only by `DragSurface`, the leaf that applies the
+///   container transform. A drag sample re-runs one three-line body instead of
+///   re-diffing five pages of materials, gradients and carousels.
+/// - `currentPage` and `dragTarget` are read only by `Pager`, which rebuilds
+///   the page stack once per committed turn plus at most once more per drag
+///   when the headed-toward neighbour changes.
+///
+/// Nothing else observes them, so a drag never reaches a page body. Live drag
+/// tracks 1:1 with no animation because the user is the animation (Apple
+/// reserves `interactiveSpring` for driven animations, not finger tracking).
+/// Every settle — a committed turn, a cancelled drag, a programmatic move —
+/// runs on the same named preset: `.smooth`, critically damped, because paging
+/// is arrival and does not overshoot.
 /// See https://sosumi.ai/documentation/swiftui/draggesture/value/predictedendtranslation
 /// https://sosumi.ai/documentation/swiftui/animation/interactivespring(response:dampingfraction:blendduration:)
 /// https://sosumi.ai/design/human-interface-guidelines/gestures
 @MainActor
 @Observable
 final class NavigationController {
-    var currentPage: LumenPage = .home
-    /// Live drag. Read ONLY by the container offset — never by page bodies —
-    /// so per-sample updates rebuild identical child values (skipped via
-    /// `.equatable()`) instead of re-rendering content at gesture frequency.
-    var dragOffset: CGSize = .zero
-    /// Bumped on every release commit — page turn or cancelled return — so
-    /// the view-side settle task restarts and the haptic lands with the
-    /// pixels, never at finger lift.
-    var settleNonce = 0
+    private(set) var currentPage: LumenPage = .home
+
+    /// The live drag in rubber-banded points. Read by `DragSurface` and by
+    /// nothing else in the pager.
+    private(set) var dragOffset: CGSize = .zero
+
+    /// The neighbour the current drag is headed toward, if any. Written in
+    /// `dragChanged` only when it actually changes (at most ~1 write per drag),
+    /// so `Pager` rebuilds at most twice per turn to flip pages live. Cleared in
+    /// `go(to:)` when the turn commits. Lets off-current pages freeze their
+    /// frame drivers while untouched, then resume a touch ahead of becoming
+    /// visible.
+    private(set) var dragTarget: LumenPage?
+
+    /// Bumped once a settle animation has landed, so the haptic rides the pixels
+    /// rather than a timer running beside them.
+    private(set) var settleHapticTick = 0
+
+    /// Identifies the settle whose completion is allowed to fire the haptic: a
+    /// turn superseded before it lands never clicks.
+    @ObservationIgnored private var settleToken = 0
 
     func dragChanged(_ translation: CGSize, from page: LumenPage, metrics: PagingMetrics) {
-        // 1:1, deliberately unanimated — the user is the animation.
         dragOffset = metrics.rubberbanded(translation, from: page)
+        let next = Self.neighborTarget(from: page, translation: translation)
+        if next != dragTarget {
+            dragTarget = next
+        }
     }
 
     func dragEnded(
@@ -145,34 +222,60 @@ final class NavigationController {
         metrics: PagingMetrics,
         reduceMotion: Bool
     ) {
-        let predicted = clamped(value.predictedEndTranslation, from: page, metrics: metrics)
-        let target = targetPage(from: page, predicted: predicted, metrics: metrics)
-        go(to: target, reduceMotion: reduceMotion)
+        // Decide from the projected resting point, not the raw distance: the
+        // target is where a flick was actually going.
+        let predicted = metrics.clamped(value.predictedEndTranslation, from: page)
+        go(to: targetPage(from: page, predicted: predicted, metrics: metrics), reduceMotion: reduceMotion)
     }
 
-    /// Programmatic move (accessibility, deep links). Same presets as gestures.
+    /// Programmatic move (VoiceOver, a breathing session). Same presets as
+    /// gestures, and the same haptic.
     func go(to target: LumenPage, reduceMotion: Bool) {
-        let animation = reduceMotion
-            ? UIConstants.Animation.motionReduced
-            : UIConstants.Animation.smoothSpring
-        settleNonce += 1
-        // dragOffset returns inside the same animation: a rubber-banded
-        // release glides home instead of teleporting (@GestureState reset
-        // cannot animate — that one-frame snap was the jank).
-        withAnimation(animation) {
+        settleToken &+= 1
+        let token = settleToken
+        withAnimation(
+            reduceMotion ? UIConstants.Animation.motionReduced : UIConstants.Animation.smoothSpring,
+            completionCriteria: .logicallyComplete
+        ) {
+            // `dragOffset` returns inside the same animation: a rubber-banded
+            // release glides home instead of teleporting. (@GestureState reset
+            // cannot animate — that one-frame snap was the jank.)
             currentPage = target
             dragOffset = .zero
+            dragTarget = nil
+        } completion: { [self] in
+            // Fires when the pixels land, so a skipped-over or interrupted turn
+            // never clicks.
+            guard token == self.settleToken else { return }
+            self.settleHapticTick &+= 1
         }
     }
 
     // MARK: - Physics
 
-    private func clamped(_ translation: CGSize, from page: LumenPage, metrics: PagingMetrics) -> CGSize {
-        let ranges = metrics.validRanges(from: page)
-        return CGSize(
-            width: min(max(translation.width, ranges.x.lowerBound), ranges.x.upperBound),
-            height: min(max(translation.height, ranges.y.lowerBound), ranges.y.upperBound)
-        )
+    /// The neighbour a drag is headed toward, from direction alone. A neighbour
+    /// one step forward sits at `+step`, so the drag that reveals it goes back
+    /// by `-step`: the drag always opposes the neighbour's offset. Dominant
+    /// axis wins; the other axis is the fallback when the dominant side has no
+    /// neighbour. Threshold matches the pager's 8pt claim so pages go live a
+    /// touch before becoming visible.
+    private static func neighborTarget(from page: LumenPage, translation: CGSize) -> LumenPage? {
+        let threshold: CGFloat = 8
+        let w = translation.width
+        let h = translation.height
+        guard max(abs(w), abs(h)) > threshold else { return nil }
+        if abs(w) >= abs(h) {
+            if w < 0, let n = LumenPage(column: page.column + 1, row: page.row) { return n }
+            if w > 0, let n = LumenPage(column: page.column - 1, row: page.row) { return n }
+            if h < 0, let n = LumenPage(column: page.column, row: page.row + 1) { return n }
+            if h > 0, let n = LumenPage(column: page.column, row: page.row - 1) { return n }
+        } else {
+            if h < 0, let n = LumenPage(column: page.column, row: page.row + 1) { return n }
+            if h > 0, let n = LumenPage(column: page.column, row: page.row - 1) { return n }
+            if w < 0, let n = LumenPage(column: page.column + 1, row: page.row) { return n }
+            if w > 0, let n = LumenPage(column: page.column - 1, row: page.row) { return n }
+        }
+        return nil
     }
 
     private func targetPage(from page: LumenPage, predicted: CGSize, metrics: PagingMetrics) -> LumenPage {
@@ -196,11 +299,18 @@ final class NavigationController {
     }
 }
 
-/// Full-screen pager. Each page is viewport-sized and offset into place — one
-/// transform per page, no oversized content frame, no centering drift.
+// MARK: - Pager
+
+/// The full-screen pager.
+///
+/// This view is a shell. It owns the pager's state, hands the viewport down, and
+/// carries the accessibility surface and the settle haptic — nothing that has to
+/// run while a finger is down. The one reading of `dragOffset` lives in
+/// `DragSurface`, two levels below, so a drag sample re-runs a transform and
+/// nothing else.
 ///
 /// HIG notes: paging tracks the finger and settles with velocity projection
-/// (Gestures, Scroll views); VoiceOver moves via adjustable action because
+/// (Gestures, Scroll views); VoiceOver moves via the adjustable action because
 /// drag is not an assumption (Gestures, VoiceOver); offscreen pages leave the
 /// accessibility tree and hit testing so they can't trap focus or touches.
 struct CoreNavigation: View {
@@ -208,9 +318,6 @@ struct CoreNavigation: View {
     @Environment(BreathingState.self) private var breathing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var controller = NavigationController()
-    /// Haptic tick, bumped once the settle animation has landed — on every
-    /// release, including a cancelled drag that returns to the origin page.
-    @State private var settleHapticTick = 0
 
     init(collectionsExpanded: Binding<Bool> = .constant(false)) {
         _collectionsExpanded = collectionsExpanded
@@ -218,46 +325,13 @@ struct CoreNavigation: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let metrics = PagingMetrics(pageSize: proxy.size)
-            let current = controller.currentPage
-
-            // Per-page offsets are settle-stable (no drag term): during a drag
-            // every page holds its settled appearance and the whole stack slides
-            // as rigid bitmaps via the single container offset. Recede no longer
-            // tracks the finger — it crossfades on settle instead. That is the
-            // fix for collections trailing the frame ~20-30px on device: the old
-            // per-page drag term re-invalidated a dozen materials, gradients and
-            // carousels every touch sample, so the cheap transform committed
-            // while the content subtree was still re-rendering the last sample.
-            ZStack {
-                ForEach(LumenPage.allCases) { page in
-                    PageView(
-                        page: page,
-                        size: metrics.pageSize,
-                        offset: CGSize(
-                            width: CGFloat(page.column - current.column) * metrics.stepX,
-                            height: CGFloat(page.row - current.row) * metrics.stepY
-                        ),
-                        metrics: metrics,
-                        isCurrent: page == current,
-                        reduceMotion: reduceMotion,
-                        collectionsExpanded: $collectionsExpanded
-                    )
-                    // Guarantee the skip: identical inputs must not re-run this
-                    // body at gesture frequency (swiftui-pro performance). The
-                    // parent body re-runs per drag sample; without this, the
-                    // materials/carousel subtree re-evaluates per sample and
-                    // main-thread saturation makes delivery steppy.
-                    .equatable()
-                }
-            }
-            .frame(width: metrics.pageSize.width, height: metrics.pageSize.height)
-            // The ONLY live-drag reader: one cheap transform node. Page bodies
-            // are out of this path (see above + `.equatable()` below).
-            .offset(controller.dragOffset)
-            .clipped()
-            .contentShape(Rectangle())
-            .gesture(pagingGesture(metrics: metrics), isEnabled: !collectionsExpanded && !breathing.isBreathing)
+            Pager(
+                viewport: proxy.size,
+                controller: controller,
+                reduceMotion: reduceMotion,
+                collectionsExpanded: $collectionsExpanded,
+                isPagingEnabled: !collectionsExpanded && !breathing.isBreathing
+            )
         }
         .onChange(of: breathing.isBreathing) { _, isBreathing in
             // A breathing session owns the screen: land on the breathe page
@@ -267,36 +341,53 @@ struct CoreNavigation: View {
                 controller.go(to: .breathe, reduceMotion: reduceMotion)
             }
         }
-        .sensoryFeedback(.selection, trigger: settleHapticTick)
-        .task(id: controller.settleNonce) { [nonce = controller.settleNonce, reduceMotion] in
-            // Fire only once the settle animation has landed: the task starts
-            // at release and auto-cancels if a new turn interrupts it, so a
-            // skipped-over page never clicks. Nonce 0 is first appear: silent.
-            // (Values are bound in the capture list so the @Sendable task
-            // never captures the non-Sendable controller.)
-            guard nonce != 0 else { return }
-            let delay = (reduceMotion
-                ? UIConstants.Animation.reducedDuration
-                : UIConstants.Animation.smoothDuration) + 0.05
-            try? await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            settleHapticTick += 1
-        }
+        .sensoryFeedback(.selection, trigger: controller.settleHapticTick)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Pages")
-        .accessibilityValue("\(controller.currentPage.title), \(controller.currentPage.rawValue + 1) of \(LumenPage.allCases.count)")
-        .accessibilityHint("Swipe to move between pages")
+        .accessibilityLabel(Text("Pages"))
+        .accessibilityValue(pagerValue)
+        .accessibilityHint(Text("Swipe to move between pages"))
         .accessibilityAdjustableAction { direction in
             step(direction == .increment ? 1 : -1)
         }
     }
 
+    private var pagerValue: Text {
+        let page = controller.currentPage
+        return Text("\(page.title), \(page.rawValue + 1) of \(LumenPage.pages.count)")
+    }
+
     private func step(_ direction: Int) {
         guard !breathing.isBreathing else { return }
-        let order = LumenPage.allCases
+        let order = LumenPage.pages
         guard let index = order.firstIndex(of: controller.currentPage) else { return }
-        let next = order[(index + direction + order.count) % order.count]
-        controller.go(to: next, reduceMotion: reduceMotion)
+        controller.go(to: order[(index + direction + order.count) % order.count], reduceMotion: reduceMotion)
+    }
+}
+
+/// The viewport's contents plus the paging gesture.
+///
+/// Reads `currentPage` and `dragTarget` and nothing else from the controller:
+/// rebuilt once per committed turn plus at most one extra rebuild per drag
+/// when the headed-toward neighbour changes — never per drag sample.
+private struct Pager: View {
+    let viewport: CGSize
+    let controller: NavigationController
+    let reduceMotion: Bool
+    @Binding var collectionsExpanded: Bool
+    let isPagingEnabled: Bool
+
+    var body: some View {
+        DragSurface(controller: controller) {
+            PageStack(
+                metrics: PagingMetrics(pageSize: viewport),
+                current: controller.currentPage,
+                dragTarget: controller.dragTarget,
+                reduceMotion: reduceMotion,
+                collectionsExpanded: $collectionsExpanded
+            )
+        }
+        .contentShape(Rectangle())
+        .gesture(pagingGesture, isEnabled: isPagingEnabled)
     }
 
     /// Claim threshold: 8pt (base-4 grid) is the compromise between HIG
@@ -305,95 +396,154 @@ struct CoreNavigation: View {
     /// `12`) win when they start inside a page. 12pt felt sticky on slow drags;
     /// 0pt starves inner gestures because the outer pager claims first.
     /// `coordinateSpace: .local` keeps translation in the viewport's own points.
-    /// Tracking writes `dragOffset` 1:1 (container transform only — never into
-    /// page bodies); target selection stays velocity-projected in `dragEnded`.
-    /// Disabling via `isEnabled` blocks new gestures; an in-flight drag simply
-    /// stops receiving events and the animated return still runs in `go(to:)`.
+    /// Tracking writes `dragOffset` 1:1 and nothing else; the target is chosen
+    /// from the projected resting point in `dragEnded`. Disabling via
+    /// `isEnabled` blocks new gestures; an in-flight drag simply stops receiving
+    /// events and the animated return still runs in `go(to:)`.
     /// See https://sosumi.ai/documentation/swiftui/draggesture/minimumdistance
     /// https://sosumi.ai/design/human-interface-guidelines/gestures
     /// https://sosumi.ai/documentation/swiftui/composing-swiftui-gestures
-    private func pagingGesture(metrics: PagingMetrics) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+    private var pagingGesture: some Gesture {
+        let metrics = PagingMetrics(pageSize: viewport)
+        return DragGesture(minimumDistance: 8, coordinateSpace: .local)
             .onChanged { value in
                 controller.dragChanged(value.translation, from: controller.currentPage, metrics: metrics)
             }
             .onEnded { value in
-                controller.dragEnded(value, from: controller.currentPage, metrics: metrics, reduceMotion: reduceMotion)
+                controller.dragEnded(
+                    value,
+                    from: controller.currentPage,
+                    metrics: metrics,
+                    reduceMotion: reduceMotion
+                )
             }
     }
 }
 
-/// One viewport-sized page. Off-center pages recede via `subduedBlur` +
-/// `subduedDim`, driven by swipe progress. Deliberately no scale: it is the
-/// only recede channel that moves pixels, and its completion at landing reads
-/// as a positional shift on every page (see below).
+/// The pager's only reader of `NavigationController.dragOffset`.
 ///
-/// The inputs here are settle-stable: `offset` carries no drag term (live drag
-/// is a container transform, see `CoreNavigation.body`), so progress — and
-/// therefore blur radius — is constant for the whole drag. Static blur renders
-/// once and slides as a cached layer; no per-sample re-render, no touch-down
-/// pop, so no `isDragging` gate is needed. Reduce Motion keeps the opacity dim
-/// as its substitute and drops blur.
+/// A stored view value plus one transform, so a drag sample costs one transform
+/// and nothing else. Reading the offset in the view that builds the pages — the
+/// obvious way to write this — re-diffed all five pages on every touch sample,
+/// and that main-thread work is what made delivery steppy on device.
+private struct DragSurface<Content: View>: View {
+    let controller: NavigationController
+    private let content: Content
+
+    init(controller: NavigationController, @ViewBuilder content: () -> Content) {
+        self.controller = controller
+        // Built here rather than stored as a closure: a retained closure is
+        // re-invoked whenever the enclosing view's properties change, which
+        // would rebuild the page stack on every drag sample and defeat the
+        // point of this type.
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .offset(controller.dragOffset)
+            .clipped()
+    }
+}
+
+/// The five pages, placed by settled geometry.
 ///
-/// Modifier order is load-bearing: the page is clipped first so `blur` and
-/// `opacity` operate on the clipped card (not the internal rectangle), then
-/// clipped again with the identical shape so the blur's softened edge is cut
-/// back to a crisp card boundary. `compositingGroup` unifies the clipped page
-/// into one layer for the blur. Deliberately NO `geometryGroup` here: the barrier
-/// forces inner `.position()` values to be resolved/animated by the parent on
-/// top of the outer offset spring, so grouped content diverges from the frame
-/// mid-settle and only converges at landing — the uniform shift seen on device
-/// on every page. Static inner positions pass through untouched instead.
+/// Reads no observable state of its own: `Pager` rebuilds it when a turn is
+/// committed or the headed-toward neighbour changes, and a drag never reaches it.
+private struct PageStack: View {
+    let metrics: PagingMetrics
+    let current: LumenPage
+    let dragTarget: LumenPage?
+    let reduceMotion: Bool
+    @Binding var collectionsExpanded: Bool
+
+    var body: some View {
+        // Per-page offsets are settle-stable (no drag term): during a drag every
+        // page holds its settled appearance and the whole stack slides as rigid
+        // bitmaps via the single container offset in `DragSurface`. Recede does
+        // not track the finger — it crossfades on settle instead.
+        ZStack {
+            ForEach(LumenPage.pages) { page in
+                PageView(
+                    page: page,
+                    metrics: metrics,
+                    offset: metrics.offset(of: page, relativeTo: current),
+                    isCurrent: page == current,
+                    isLive: page == current || page == dragTarget,
+                    reduceMotion: reduceMotion,
+                    collectionsExpanded: $collectionsExpanded
+                )
+                // Guarantee the skip: identical inputs must not re-run a page
+                // body at gesture frequency (swiftui-pro performance).
+                .equatable()
+            }
+        }
+        .frame(width: metrics.pageSize.width, height: metrics.pageSize.height)
+    }
+}
+
+/// One viewport-sized page. Off-center pages recede via `subduedDim` only —
+/// dim and nothing else. Blur is gone by design (plan B): two full-screen
+/// variable-radius blurs re-evaluated every frame of the settle was the lag,
+/// confirmed by the Reduce Motion test, and freezing the frame drivers alone
+/// did not recover it. Opacity crossfades on settle; pages land with zero
+/// relative motion by construction, so the settled look stays pixel-identical
+/// on every page.
+///
+/// Deliberately no scale on any page: scale is the only recede channel that
+/// moves pixels (opacity cannot translate), and its completion at landing
+/// reads as a positional shift — downward on collections and Home alike,
+/// confirmed on device across pages. Anchoring or exempting per page just
+/// moves the symptom, so the fix lives here globally.
+///
+/// Deliberately NO `compositingGroup` here either: with no blur there is no
+/// layer to unify, and a full-screen offscreen is real GPU memory for nothing.
+/// Deliberately NO `geometryGroup`: the barrier forces inner `.position()`
+/// values to be resolved/animated by the parent on top of the outer offset
+/// spring, so grouped content diverges from the frame mid-settle and only
+/// converges at landing — the uniform shift seen on device on every page.
+/// Static inner positions pass through untouched instead.
 /// See https://sosumi.ai/documentation/swiftui/view/geometrygroup()
 /// https://sosumi.ai/documentation/swiftui/view/compositinggroup()
-/// https://sosumi.ai/documentation/swiftui/view/blur(radius:opaque:)
 /// https://sosumi.ai/documentation/xcode/understanding-and-improving-swiftui-performance
 private struct PageView: View, Equatable {
     let page: LumenPage
-    let size: CGSize
-    let offset: CGSize
     let metrics: PagingMetrics
+    let offset: CGSize
     let isCurrent: Bool
+    /// Whether this page's frame drivers may run: settled here or the drag is
+    /// headed here. Off-live pages hold a still frame (cheap to blur and slide).
+    let isLive: Bool
     let reduceMotion: Bool
     @Binding var collectionsExpanded: Bool
 
     // @Binding blocks synthesized Equatable; compare underlying values.
     static func == (lhs: PageView, rhs: PageView) -> Bool {
         lhs.page == rhs.page
-            && lhs.size == rhs.size
-            && lhs.offset == rhs.offset
             && lhs.metrics == rhs.metrics
+            && lhs.offset == rhs.offset
             && lhs.isCurrent == rhs.isCurrent
+            && lhs.isLive == rhs.isLive
             && lhs.reduceMotion == rhs.reduceMotion
             && lhs.collectionsExpanded == rhs.collectionsExpanded
     }
 
+    private static let card = ConcentricRectangle(corners: .concentric, isUniform: true)
+
+    /// How far this page sits from the settled one, 0…1 — the recede's driver.
+    private var progress: CGFloat {
+        min(hypot(offset.width / metrics.stepX, offset.height / metrics.stepY), 1)
+    }
+
     var body: some View {
-        let progress = min(
-            hypot(offset.width / metrics.stepX, offset.height / metrics.stepY),
-            1
-        )
-        let blurRadius: CGFloat = reduceMotion ? 0 : FocusSystem.Constant.subduedBlur * progress
-        // No scale recede on ANY page: scale is the only recede channel that
-        // moves pixels (blur/opacity cannot translate), and its 0.95→1.0
-        // completion at landing reads as a positional shift — downward on
-        // collections (bottom-glued disk) and Home alike, confirmed on device
-        // across pages. Anchoring or exempting per page just moves the symptom
-        // (center dropped the disk; bottom lifted everything above it), so the
-        // fix lives here globally: pages recede via dim + blur only, and land
-        // with zero relative motion by construction. Scale == 1 keeps the
-        // settled look pixel-identical on every page.
         content
-            .frame(width: size.width, height: size.height)
-            .clipShape(.rect(cornerRadius: UIConstants.General.screenCornerRadius))
-            .compositingGroup()
-            .blur(radius: blurRadius)
+            .frame(width: metrics.pageSize.width, height: metrics.pageSize.height)
+            .clipShape(Self.card)
             .opacity(1 - (1 - FocusSystem.Constant.subduedDim) * Double(progress))
-            .clipShape(.rect(cornerRadius: UIConstants.General.screenCornerRadius))
             .offset(offset)
             .allowsHitTesting(isCurrent)
             .accessibilityHidden(!isCurrent)
-            .accessibilityLabel(page.title)
+            .accessibilityLabel(Text(page.title))
             .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }
 
@@ -401,10 +551,10 @@ private struct PageView: View, Equatable {
     private var content: some View {
         switch page {
         case .memory: MemoryView()
-        case .home: HomeView()
-        case .breathe: BreatheView()
-        case .collections: CollectionsView(collectionsExpanded: $collectionsExpanded, pageSize: size)
-        case .room: RoomView()
+        case .home: HomeView(isLive: isLive)
+        case .breathe: BreatheView(isLive: isLive)
+        case .collections: CollectionsView(collectionsExpanded: $collectionsExpanded, pageSize: metrics.pageSize)
+        case .room: RoomView(isLive: isLive)
         }
     }
 }
