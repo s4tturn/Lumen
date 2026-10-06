@@ -39,7 +39,6 @@ struct BreatheView: View {
     @State private var displacement = BreathStates.neutral.displacement
     @State private var radiusFraction = UIConstants.Breathe.breatheRestingSize
 
-    @State private var atB = false
     @State private var prompt = BreathPrompt.resting
     /// How much of its size the blob keeps while a finger is on it — 1 when
     /// untouched. A multiplier on the radius rather than a size of its own, so
@@ -135,6 +134,10 @@ struct BreatheView: View {
                 Color.clear
                     .frame(width: radius * 2.8, height: radius * 2.8)
                     .contentShape(Circle())
+                    // The touch target itself: invisible, and wider than
+                    // the blob by design — the whole area a touch is
+                    // caught over.
+                    .debugSurfaceBorder(Circle())
                     .gesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .local)
                             .onChanged { value in
@@ -226,7 +229,6 @@ struct BreatheView: View {
             // is why it sits above the fork.
             withAnimation(pressSpring) { pressScale = 1 }
             if forward {
-                atB = false
                 goTo(
                     speed: BreathStates.a.speed,
                     displacement: BreathStates.a.displacement,
@@ -246,7 +248,6 @@ struct BreatheView: View {
                 cycleTask?.cancel()
                 cycleTask = nil
                 awaitingRelease = false
-                atB = false
                 progressStart = nil
                 // Recede on the way out too, and blank the word so the next
                 // session's first word is a change and cascades in fresh.
@@ -288,7 +289,6 @@ struct BreatheView: View {
             var coached = 0
             while true {
                 if Task.isCancelled { return }
-                atB = true
                 prompt = .inhale
                 // The word has to exist before the layer materializes, or the
                 // prompt focuses in empty — hence here rather than on the thump,
@@ -312,7 +312,6 @@ struct BreatheView: View {
                 progressDuration = hold
                 try? await Task.sleep(for: .seconds(hold))
                 if Task.isCancelled { return }
-                atB = false
                 prompt = .exhale
                 progressStart = .now
                 progressDuration = exhale

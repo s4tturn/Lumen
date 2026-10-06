@@ -1,9 +1,4 @@
-import CoreGraphics
-import Foundation
-import Observation
-import RealityKit
 import SwiftUI
-import _RealityKit_SwiftUI
 
 // MARK: - Room
 
@@ -72,7 +67,7 @@ struct RoomScene: Identifiable, Hashable, Sendable {
     /// dumbbells" expressible without hiding the rack they sit in.
     let reveals: [RoomReveal]
 
-    /// The USDZ in `ModelAssets/Objects`, resolved from the app bundle by name.
+    /// The USDZ in `RoomAssets`, resolved from the app bundle by name.
     let assetName: String
 
     /// What this room is called. Read by VoiceOver — on the tab itself and on
@@ -92,15 +87,6 @@ struct RoomScene: Identifiable, Hashable, Sendable {
     /// A symbol *name* rather than copy, so it is a plain `String` and nothing to
     /// look up in a table.
     let symbol: String
-
-    /// The same symbol in its fill variant — the spelling the
-    /// selected tab draws. Derived from the outline name, because
-    /// every room symbol has a fill variant, and the tab swaps
-    /// between the two by name so the swap itself can animate: a
-    /// name change is a content change, and a content change is
-    /// what a symbol's replace animation animates (see
-    /// `RoomTabButton`).
-    var filledSymbol: String { "\(symbol).fill" }
 
     /// Subtle tint for this room's glass while it is the one being shown.
     ///
@@ -227,95 +213,11 @@ struct RoomScene: Identifiable, Hashable, Sendable {
     static func == (lhs: RoomScene, rhs: RoomScene) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
-
-// MARK: - Bounds
-
-/// An axis-aligned box by its two opposite corners.
-///
-/// RealityKit measures geometry as a `BoundingBox` — a middle and a whole size —
-/// but every question the room asks of a box is about a corner: where the room
-/// starts and stops, how far one mesh reaches past the rest, which way a wall
-/// looks. Holding the corners rather than re-deriving them from the middle at
-/// every question is what lets the whole of the framing walk below be written
-/// once instead of three times.
-struct RoomBounds {
-    /// The corner with the smallest value on every axis.
-    let lo: SIMD3<Float>
-
-    /// The corner with the largest value on every axis.
-    let hi: SIMD3<Float>
-
-    /// Middle of the box.
-    var mid: SIMD3<Float> { (lo + hi) / 2 }
-
-    /// Whole size of the box along each axis.
-    var extents: SIMD3<Float> { hi - lo }
-
-    /// The smallest box containing all of `boxes`.
-    ///
-    /// Nothing in it. A union with nothing in it is the whole of it, so an empty
-    /// input is left to read as that rather than special-cased here — every caller
-    /// has something to measure, and the ones that might not already say so.
-    init(_ boxes: some Sequence<BoundingBox>) {
-        var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
-        var hi = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
-        for box in boxes {
-            let half = box.extents / 2
-            lo = simd_min(lo, box.center - half)
-            hi = simd_max(hi, box.center + half)
-        }
-        self.init(lo: lo, hi: hi)
-    }
-
-    private init(lo: SIMD3<Float>, hi: SIMD3<Float>) {
-        self.lo = lo
-        self.hi = hi
-    }
-
-    /// The smallest box containing both of these.
-    func united(with other: RoomBounds) -> RoomBounds {
-        RoomBounds(lo: simd_min(lo, other.lo), hi: simd_max(hi, other.hi))
-    }
-
-    /// Whether this box reaches more than half again past `rest` on any axis.
-    ///
-    /// That is the test for a mesh that has come loose from the room it is in: a
-    /// shirt in a wardrobe hanging tens of metres below the floor, say. It cannot
-    /// be a wall, because the four walls share the room's extremes and so no one
-    /// of them owns them.
-    func overhangs(_ rest: RoomBounds) -> Bool {
-        let slack = rest.extents / 2
-        return lo.x < rest.lo.x - slack.x || hi.x > rest.hi.x + slack.x
-            || lo.y < rest.lo.y - slack.y || hi.y > rest.hi.y + slack.y
-            || lo.z < rest.lo.z - slack.z || hi.z > rest.hi.z + slack.z
-    }
-}
+import CoreGraphics
+import Foundation
+import RealityKit
 
 // MARK: - Camera
-
-/// One box of the geometry a room draws before any task is done, in the space its
-/// pivot turns it in.
-///
-/// Kept rather than discarded once the frame has been fitted, because the room
-/// turns. A room is not a symmetric box, so its silhouette crosses the frame as it
-/// turns even though the pivot never moves — the drawn middle is the frame's middle
-/// only at the angle it was measured at. These are the only numbers re-aiming needs:
-/// a centre and three half-extents, fifteen of them for the Kitchen and thirty-five
-/// for the Bedroom, which is nothing beside walking the graph.
-struct RoomSilhouette {
-    /// Middle of the box, measured from the pivot. Pivot-relative because that is
-    /// the space the turn happens in.
-    let offset: SIMD3<Float>
-
-    /// Half the box's size along each of its own three axes.
-    ///
-    /// A half, not a length: RealityKit's `BoundingBox.extents` is the box's whole
-    /// size, and `RoomBounds` already halves it to find the corners. Framing
-    /// that used the extents as if they were halves measured every silhouette twice
-    /// as large as it is, which both halves the room's drawn size and moves the aim
-    /// off the middle of what is actually there.
-    let half: SIMD3<Float>
-}
 
 /// The room's fixed isometric orthographic camera, and the framing that centres
 /// and fits it.
@@ -563,8 +465,8 @@ struct RoomCamera {
     }
 
     /// Builds the camera entity. The camera is parentless, so aiming it in
-    /// world space is its final placement. Square to the room's own front, which
-    /// is how every room is first shown.
+    /// world space is its final placement. Square to the room's own front, which is
+    /// how every room is first shown.
     func makeEntity(viewport: CGSize) -> Entity {
         var component = OrthographicCameraComponent()
         component.near = Self.near
@@ -644,6 +546,139 @@ struct RoomCamera {
         return ((lo + hi) / 2, hi - lo)
     }
 }
+import RealityKit
+
+// MARK: - Bounds
+
+/// An axis-aligned box by its two opposite corners.
+///
+/// RealityKit measures geometry as a `BoundingBox` — a middle and a whole size —
+/// but every question the room asks of a box is about a corner: where the room
+/// starts and stops, how far one mesh reaches past the rest, which way a wall
+/// looks. Holding the corners rather than re-deriving them from the middle at
+/// every question is what lets the whole of the framing walk below be written
+/// once instead of three times.
+struct RoomBounds {
+    /// The corner with the smallest value on every axis.
+    let lo: SIMD3<Float>
+
+    /// The corner with the largest value on every axis.
+    let hi: SIMD3<Float>
+
+    /// Middle of the box.
+    var mid: SIMD3<Float> { (lo + hi) / 2 }
+
+    /// Whole size of the box along each axis.
+    var extents: SIMD3<Float> { hi - lo }
+
+    /// The smallest box containing all of `boxes`.
+    ///
+    /// Nothing in it. A union with nothing in it is the whole of it, so an empty
+    /// input is left to read as that rather than special-cased here — every caller
+    /// has something to measure, and the ones that might not already say so.
+    init(_ boxes: some Sequence<BoundingBox>) {
+        var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+        var hi = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+        for box in boxes {
+            let half = box.extents / 2
+            lo = simd_min(lo, box.center - half)
+            hi = simd_max(hi, box.center + half)
+        }
+        self.init(lo: lo, hi: hi)
+    }
+
+    private init(lo: SIMD3<Float>, hi: SIMD3<Float>) {
+        self.lo = lo
+        self.hi = hi
+    }
+
+    /// The smallest box containing both of these.
+    func united(with other: RoomBounds) -> RoomBounds {
+        RoomBounds(lo: simd_min(lo, other.lo), hi: simd_max(hi, other.hi))
+    }
+
+    /// Whether this box reaches more than half again past `rest` on any axis.
+    ///
+    /// That is the test for a mesh that has come loose from the room it is in: a
+    /// shirt in a wardrobe hanging tens of metres below the floor, say. It cannot
+    /// be a wall, because the four walls share the room's extremes and so no one
+    /// of them owns them.
+    func overhangs(_ rest: RoomBounds) -> Bool {
+        let slack = rest.extents / 2
+        return lo.x < rest.lo.x - slack.x || hi.x > rest.hi.x + slack.x
+            || lo.y < rest.lo.y - slack.y || hi.y > rest.hi.y + slack.y
+            || lo.z < rest.lo.z - slack.z || hi.z > rest.hi.z + slack.z
+    }
+}
+
+// MARK: - Silhouette
+
+/// One box of the geometry a room draws before any task is done, in the space its
+/// pivot turns it in.
+///
+/// Kept rather than discarded once the frame has been fitted, because the room
+/// turns. A room is not a symmetric box, so its silhouette crosses the frame as it
+/// turns even though the pivot never moves — the drawn middle is the frame's middle
+/// only at the angle it was measured at. These are the only numbers re-aiming needs:
+/// a centre and three half-extents, fifteen of them for the Kitchen and thirty-five
+/// for the Bedroom, which is nothing beside walking the graph.
+struct RoomSilhouette {
+    /// Middle of the box, measured from the pivot. Pivot-relative because that is
+    /// the space the turn happens in.
+    let offset: SIMD3<Float>
+
+    /// Half the box's size along each of its own three axes.
+    ///
+    /// A half, not a length: RealityKit's `BoundingBox.extents` is the box's whole
+    /// size, and `RoomBounds` already halves it to find the corners. Framing
+    /// that used the extents as if they were halves measured every silhouette twice
+    /// as large as it is, which both halves the room's drawn size and moves the aim
+    /// off the middle of what is actually there.
+    let half: SIMD3<Float>
+}
+import RealityKit
+import SwiftUI
+
+// MARK: - Reality Stage
+
+/// The RealityKit surface: loads a room, hands the graph to `stage`, and swaps
+/// one room for another without ever being rebuilt.
+///
+/// The stage keeps this one view for the whole page, so a switch is content
+/// changing rather than a view being created and thrown away. `make` does the
+/// first load — the only place an `await` belongs, since it is the only closure
+/// that can suspend — and `update` reconciles every room after that.
+struct RoomRealityStage: View {
+    let stage: RoomStage
+    let scene: RoomScene
+
+    var body: some View {
+        RealityView { content in
+            // A virtual (non-AR) camera, and the neutral environment: the room
+            // is lit by the asset, not by the room it happens to be in.
+            content.camera = .virtual
+            content.environment = .default
+
+            guard await stage.graph(for: scene) != nil else { return }
+            stage.mount(scene, in: &content)
+        } update: { content in
+            // Reached on every update pass, which is how a swap lands: `travel`
+            // names the incoming room, the view reads it, and this hands it over.
+            // The stage decides whether there is anything to do — a pass with the
+            // same room as last time is a no-op, and so is every pass that is not
+            // part of a switch.
+            stage.mount(scene, in: &content)
+        }
+        // The RealityKit surface itself: where the room is drawn, and
+        // the frame that travels with it through a switch.
+        .debugSurfaceBorder()
+    }
+}
+import CoreGraphics
+import Foundation
+import Observation
+import RealityKit
+import SwiftUI
 
 // MARK: - Stage
 
@@ -1338,8 +1373,7 @@ final class RoomStage {
                     self.arriveAtPreset(announces: announces)
                     return
                 }
-                let travel = exp(-decay * t)
-                    * (offset * cos(frequency * t) + phase * sin(frequency * t))
+                let travel = exp(-decay * t) * (offset * cos(frequency * t) + phase * sin(frequency * t))
                 self.pinchTrack = 1 + travel
                 self.pinchScale = Self.bandedZoom(self.pinchTrack)
                 self.applyCameraScale()
@@ -1404,6 +1438,8 @@ final class RoomStage {
     private static func bandedTravel(_ past: Float) -> Float {
         (1 - 1 / (past * pinchBandGive / pinchBandSpan + 1)) * pinchBandSpan
     }
+
+    // MARK: - Turning
 
     /// Starts a drag, and reads the base the drag's offset is measured from off
     /// the room itself.
@@ -1589,38 +1625,5 @@ final class RoomStage {
     private static func smoothstep(_ t: Float) -> Float {
         let x = min(max(t, 0), 1)
         return x * x * (3 - 2 * x)
-    }
-}
-
-// MARK: - Reality Stage
-
-/// The RealityKit surface: loads a room, hands the graph to `stage`, and swaps
-/// one room for another without ever being rebuilt.
-///
-/// The stage keeps this one view for the whole page, so a switch is content
-/// changing rather than a view being created and thrown away. `make` does the
-/// first load — the only place an `await` belongs, since it is the only closure
-/// that can suspend — and `update` reconciles every room after that.
-struct RoomRealityStage: View {
-    let stage: RoomStage
-    let scene: RoomScene
-
-    var body: some View {
-        RealityView { content in
-            // A virtual (non-AR) camera, and the neutral environment: the room
-            // is lit by the asset, not by the room it happens to be in.
-            content.camera = .virtual
-            content.environment = .default
-
-            guard await stage.graph(for: scene) != nil else { return }
-            stage.mount(scene, in: &content)
-        } update: { content in
-            // Reached on every update pass, which is how a swap lands: `travel`
-            // names the incoming room, the view reads it, and this hands it over.
-            // The stage decides whether there is anything to do — a pass with the
-            // same room as last time is a no-op, and so is every pass that is not
-            // part of a switch.
-            stage.mount(scene, in: &content)
-        }
     }
 }

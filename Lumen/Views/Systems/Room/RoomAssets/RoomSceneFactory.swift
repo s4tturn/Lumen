@@ -164,13 +164,6 @@ enum RoomSceneFactory {
         // divide by the same number in the camera, which cancelled exactly and
         // left two constants that had to be read together to be understood; the
         // room is now simply drawn at the size its geometry says it is.
-        //
-        // One shift remains, and it is measured rather than assumed: `center` is
-        // the middle of the meshes that were framed, so an asset with something
-        // hanging far outside its shell leaves the pivot off-centre from the
-        // model's own box. Re-reading that offset in pivot space and taking it out
-        // is what puts the pivot through the room.
-        model.position -= bounds.mid - pivot.position
 
         return RoomSceneGraph(
             pivot: pivot,

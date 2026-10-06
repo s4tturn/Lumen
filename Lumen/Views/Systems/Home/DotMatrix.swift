@@ -56,6 +56,9 @@ struct DotMatrixView: View {
             Canvas(opaque: true, rendersAsynchronously: false) { context, size in
                 DotMatrixField.drawStatic(context: context, size: size)
             }
+            // The field's own frame — safe-area-respecting, the
+            // centre the wave ripples from.
+            .debugSurfaceBorder()
             .accessibilityHidden(true)
         } else {
             TimelineView(.animation(minimumInterval: nil, paused: !isLive)) { timeline in
@@ -66,6 +69,7 @@ struct DotMatrixView: View {
                         time: timeline.date.timeIntervalSinceReferenceDate
                     )
                 }
+                .debugSurfaceBorder()
                 .accessibilityHidden(true)
             }
         }

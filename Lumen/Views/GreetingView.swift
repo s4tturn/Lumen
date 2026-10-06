@@ -11,6 +11,9 @@ struct GreetingView: View {
             .containerRelativeFrame(.horizontal) { length, _ in length * 0.8 }
             .lineLimit(1)
             .minimumScaleFactor(0.85)
+            // The launch word's frame, so the reveal's target is
+            // visible while it arrives.
+            .debugSurfaceBorder()
             .accessibilityAddTraits(.isHeader)
     }
 }
