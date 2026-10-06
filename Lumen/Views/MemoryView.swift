@@ -15,17 +15,22 @@ import SwiftUI
 /// Monochrome by design: black base, white text, secondary details — the only
 /// colour on screen is the task pictograms.
 struct MemoryView: View {
-    @Environment(CollectionCompletionStore.self) private var completions
+    @Environment(CollectionStore.self) private var completions
 
     var body: some View {
-        GeometryReader { proxy in
+        // Built once, not twice. `rows` is a computed property that resolves every
+        // completion against the catalog, and the header wants the count while the
+        // panel wants the log — reading it in both places meant building the whole
+        // list twice per pass to answer a question the first array already knew.
+        let log = rows
+        return GeometryReader { proxy in
             GlassEffectContainer(spacing: MemoryMetrics.containerSpacing) {
                 ZStack {
                     Color.black
                     VStack(spacing: MemoryMetrics.stackGap) {
-                        MemoryHeader(count: rows.count)
+                        MemoryHeader(count: log.count)
                         MemoryPanel(
-                            rows: rows,
+                            rows: log,
                             innerPadding: MemoryMetrics.panelPadding,
                             screenRadius: proxy.screenCornerRadius
                         )
@@ -40,11 +45,6 @@ struct MemoryView: View {
                     .padding(.bottom, MemoryMetrics.panelInset)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // No manual container: the system screen container that
-                // CoreNavigation reads `concentricCornerRadii` against is the
-                // container here too, so the `ConcentricRectangle` panel below
-                // resolves its radii against the true display curve with no
-                // hardcoded radius and no measured global.
             }
         }
     }
@@ -296,7 +296,7 @@ private enum MemoryMetrics {
 
 #Preview("Memory") {
     MemoryView()
-        .environment(CollectionCompletionStore())
+        .environment(CollectionStore())
 }
 
 #Preview("Memory — kept") {
@@ -304,7 +304,7 @@ private enum MemoryMetrics {
 }
 
 private struct MemoryPreviewSeeds: View {
-    @State private var store = CollectionCompletionStore()
+    @State private var store = CollectionStore()
 
     var body: some View {
         MemoryView()

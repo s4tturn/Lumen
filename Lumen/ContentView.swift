@@ -2,14 +2,6 @@ import SwiftUI
 
 // MARK: - App Entry Point
 
-@main struct LumenApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
-
 /// The window's root: black, the five-page pager, the greeting and the ambient
 /// transport, stacked full-bleed. Composition, and as little else as possible.
 ///
@@ -36,14 +28,14 @@ struct ContentView: View {
 
     /// Reveal plus hold: when the greeting hands the screen back.
     private static var greetingRevealDelay: TimeInterval {
-        UIConstants.Animation.snappyDuration + Self.greetingHoldDuration
+        UIConstants.Animation.commitDuration + Self.greetingHoldDuration
     }
 
     @State private var collectionsExpanded = false
     @State private var breathingState = BreathingState()
     /// One record of what has been finished, shared by the collections pager,
     /// the ambient player's complete control and the completed list in Memory.
-    @State private var completions = CollectionCompletionStore()
+    @State private var completions = CollectionStore()
     /// The task the open card is showing. Owned here rather than by either of the
     /// two views that need it, because the collections page and the ambient
     /// player are siblings: only something above both can be a shared fact.
@@ -82,10 +74,19 @@ struct ContentView: View {
         // design, and each paints its own edge-to-edge background. Pages that
         // need notch clearance use fixed padding for it (see MemoryView).
         .ignoresSafeArea()
+        // The debug chrome — an FPS counter in a small rounded rectangle,
+        // top-left — sits above every layer so it stays readable over the
+        // glass. Empty in release builds.
+        .overlay(alignment: .topLeading) {
+            DebugChromeOverlay()
+        }
         .task {
             // Before the reveal, not after: the completed list in Memory has to
             // be populated the first time it can be seen, or it flashes empty.
             await completions.refresh()
+            // Nothing here has to wait on it, and it has to be read off disk and
+            // parsed before anyone can open the credits.
+            Task { await Credits.warmUp() }
             await startupSequence()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -111,7 +112,7 @@ struct ContentView: View {
         Focus.visible(.navigation)
         // Only once both motions have landed: the greeting's recede is the
         // longer of the two, and dropping it mid-flight would cut the fade short.
-        guard await Self.pause(UIConstants.Animation.smoothDuration) else { return }
+        guard await Self.pause(UIConstants.Animation.dwellDuration) else { return }
         isGreetingMounted = false
     }
 

@@ -9,3 +9,8 @@ xcuserdata/
 # Build output
 DerivedData/
 build/
+
+# SwiftPM / tool caches
+.build/
+textures/
+ERRORS.md

@@ -41,10 +41,13 @@ struct CollectionsView: View {
                 .zIndex(2)
                 .allowsHitTesting(expanded == nil)
 
-            ForEach(Array(CollectionCatalog.all.enumerated()), id: \.element.id) { index, collection in
+            // The catalog's own index range, which is constant: identity is the
+            // slot rather than a value rebuilt per evaluation, so the loop
+            // allocates nothing and reuses one view per card.
+            ForEach(CollectionCatalog.all.indices, id: \.self) { index in
                 OrbitCard(
                     model: model,
-                    collection: collection,
+                    collection: CollectionCatalog.all[index],
                     focus: focus,
                     index: index,
                     geo: geo,
@@ -52,8 +55,8 @@ struct CollectionsView: View {
                     anyExpanded: expanded != nil,
                     cornerRadius: screenCornerRadius,
                     onExpand: expand,
-                    onDismissChange: dismissChanged,
-                    onDismissEnd: dismissEnded
+                    onDragChange: cardDragChanged,
+                    onDragEnd: cardDragEnded
                 )
             }
         }
@@ -71,7 +74,7 @@ struct CollectionsView: View {
     }
 
     private var expandAnimation: Animation {
-        UIConstants.Animation.motionGate(UIConstants.Animation.smoothSpring, reduceMotion: reduceMotion)
+        UIConstants.Animation.reduceMotionGate(UIConstants.Animation.dwell, reduceMotion: reduceMotion)
     }
 
     private func expand(_ index: Int) {
@@ -88,19 +91,36 @@ struct CollectionsView: View {
         }
     }
 
-    private func dismissChanged(_ translation: CGSize) {
+    /// An open card's drag in progress: it follows the finger straight up and
+    /// holds still sideways, so a horizontal swipe on an open card does not read
+    /// as half-dismissing it. Only translates, never rotates — no animation is
+    /// involved, because the card is already moving because the finger is.
+    private func cardDragChanged(_ translation: CGSize) {
         guard model.expanded != nil else { return }
         model.dismiss = abs(translation.height) > abs(translation.width) ? min(0, translation.height) : 0
     }
 
-    private func dismissEnded(_ value: DragGesture.Value, geo: Geo) {
-        guard model.expanded != nil else { return }
+    /// The one drag, split by the state that tells the two purposes apart: a card
+    /// that is open gets lifted away, a card on the wheel gets turned. Nothing but
+    /// `expanded` separates them, which is why it cannot be a coincidence of
+    /// direction — a card is either open or it is not.
+    private func cardDragEnded(_ value: DragGesture.Value, geo: Geo) {
+        if model.expanded != nil {
+            dismissCard(value, geo: geo)
+        } else {
+            stepWheel(value, geo: geo)
+        }
+    }
+
+    /// Called only from `cardDragEnded`, which has already established that a card
+    /// is open.
+    private func dismissCard(_ value: DragGesture.Value, geo: Geo) {
         let vertical = abs(value.translation.height) > abs(value.translation.width)
         let shouldDismiss = vertical
             && (value.translation.height < -geo.dismissAt || value.velocity.height < -800)
         withAnimation(
-            UIConstants.Animation.motionGate(
-                shouldDismiss ? UIConstants.Animation.snappySpring : UIConstants.Animation.smoothSpring, reduceMotion: reduceMotion)
+            UIConstants.Animation.reduceMotionGate(
+                shouldDismiss ? UIConstants.Animation.commit : UIConstants.Animation.dwell, reduceMotion: reduceMotion)
         ) {
             if shouldDismiss {
                 model.expanded = nil
@@ -112,6 +132,45 @@ struct CollectionsView: View {
             }
             model.dismiss = 0
         }
+    }
+
+    /// A swipe on a card while none is open, turning the wheel one card along: the
+    /// wheel's own answer for anyone who wants to browse without turning it.
+    ///
+    /// Scoped by construction, not by a test. The gesture is attached to the card,
+    /// whose `contentShape` is its own rounded rect and whose z-order puts it above
+    /// the disk, so a touch that lands on a card is the card's and a touch beside
+    /// one falls through to the disk's turntable drag untouched. Nothing here has to
+    /// know where the card is on screen to keep the swipe off the space around it.
+    ///
+    /// One card per swipe, decided on release, and deliberately not a 1:1 drag: the
+    /// wheel already has a gesture that tracks the finger, and a second one
+    /// measuring the same movement differently would leave the rotation depending on
+    /// which part of the screen the finger started in. A step is also what every
+    /// other sideways carousel does, and what the wheel's adjustable action does,
+    /// so the two ways of moving here agree exactly.
+    ///
+    /// `settle` rather than `flick`: `flick` hands the spring the wheel's own
+    /// angular velocity, which a horizontal swipe does not produce and this does not
+    /// invent. It sets `ridge` as it goes, which is the trigger for the selection
+    /// tick — so arriving on the next card ticks, the same way settling a turn does.
+    private func stepWheel(_ value: DragGesture.Value, geo: Geo) {
+        // Horizontal intent only, so a diagonal or vertical drag on a card is not
+        // read as a request to change collection. Same axis test as the dismiss.
+        let travel = abs(value.translation.width) > abs(value.translation.height)
+            ? value.translation.width
+            : value.velocity.width
+        guard abs(value.translation.width) >= geo.stepAt || abs(value.velocity.width) >= geo.stepFlick
+        else { return }
+        // Left brings the next card in from the right: a card index is an angle
+        // added to the rotation, so moving left is a smaller angle, a bigger index.
+        // `settle` derives the rotation from a wrapped index, so this always lands
+        // inside one turn however often it is repeated.
+        model.settle(
+            model.focused + (travel < 0 ? 1 : -1),
+            animation: UIConstants.Animation.reduceMotionGate(
+                UIConstants.Animation.commit, reduceMotion: reduceMotion)
+        )
     }
 }
 
@@ -184,6 +243,19 @@ private struct Geo: Sendable {
     var center: CGPoint { CGPoint(x: size.width / 2, y: size.height) }
     var deadZone: CGFloat { radius * 0.06 }
     var dismissAt: CGFloat { card * 0.15 }
+    /// Horizontal travel, or the speed of a flick too short for that, that turns
+    /// the wheel one card along from a swipe on a card.
+    ///
+    /// A quarter of the card's own width rather than a fraction of the page, so
+    /// the commitment scales with the thing being swiped. Deliberately larger than
+    /// `dismissAt`: putting a card away and changing collection are not the same
+    /// level of decision, and one gesture now answers to both.
+    var stepAt: CGFloat { card * 0.25 }
+    /// Points per second at which a card swipe counts without having travelled
+    /// `stepAt`, in the same band as the dismiss's own velocity escape. A sharp
+    /// flick is as deliberate as a long slow drag, and neither should be thrown
+    /// away for being small.
+    var stepFlick: CGFloat { 900 }
     var tick: CGSize { CGSize(width: radius * 0.03, height: radius * 0.125) }
 }
 
@@ -232,8 +304,8 @@ private struct DiskView: View {
             .accessibilityAdjustableAction { direction in
                 model.settle(
                     model.focused + (direction == .increment ? 1 : -1),
-                    animation: UIConstants.Animation.motionGate(
-                        UIConstants.Animation.snappySpring, reduceMotion: reduceMotion)
+                    animation: UIConstants.Animation.reduceMotionGate(
+                        UIConstants.Animation.commit, reduceMotion: reduceMotion)
                 )
             }
             .gesture(diskDrag)
@@ -277,7 +349,7 @@ private struct DiskView: View {
                 guard model.expanded == nil, model.dragging else {
                     model.settle(
                         Int(round(-model.rotation / CollectionCatalog.spacing)),
-                        animation: gate(UIConstants.Animation.snappySpring)
+                        animation: gate(UIConstants.Animation.commit)
                     )
                     return
                 }
@@ -285,16 +357,12 @@ private struct DiskView: View {
                     hypot(point.x - center.x, point.y - center.y) >= dead
                 }
                 guard clear(value.location), clear(value.predictedEndLocation) else {
-                    model.settle(Int(round(-model.rotation / CollectionCatalog.spacing)), animation: gate(UIConstants.Animation.snappySpring))
+                    model.settle(Int(round(-model.rotation / CollectionCatalog.spacing)), animation: gate(UIConstants.Animation.commit))
                     return
                 }
                 let projected = model.rotation + norm(angle(of: value.location), angle(of: value.predictedEndLocation))
                 model.flick(to: Int(round(-projected / CollectionCatalog.spacing))) { normalized in
-                    gate(.interpolatingSpring(
-                        duration: 0.38,
-                        bounce: 0.15,
-                        initialVelocity: min(max(normalized, -6), 6)
-                    ))
+                    UIConstants.Animation.releaseSpring(initialVelocity: normalized, reduceMotion: reduceMotion)
                 }
             }
     }
@@ -311,7 +379,7 @@ private struct DiskView: View {
     }
 
     private func gate(_ animation: Animation) -> Animation {
-        UIConstants.Animation.motionGate(animation, reduceMotion: reduceMotion)
+        UIConstants.Animation.reduceMotionGate(animation, reduceMotion: reduceMotion)
     }
 }
 
@@ -333,8 +401,14 @@ private struct OrbitCard: View {
     /// instead of guessing at it.
     let cornerRadius: CGFloat
     let onExpand: (Int) -> Void
-    let onDismissChange: (CGSize) -> Void
-    let onDismissEnd: (DragGesture.Value, Geo) -> Void
+    /// Drag in progress and drag finished, reported as drags. One gesture serves
+    /// two purposes — it lifts an open card away and it turns the wheel when
+    /// nothing is open — and the card does not know which, so it sends the
+    /// translation and the view above decides what it meant. Routing here rather
+    /// than firing both and letting each decline would make the exclusivity a fact
+    /// the reader has to go looking for.
+    let onDragChange: (CGSize) -> Void
+    let onDragEnd: (DragGesture.Value, Geo) -> Void
 
     var body: some View {
         let orbitAngle = model.rotation + Double(index) * CollectionCatalog.spacing
@@ -357,6 +431,12 @@ private struct OrbitCard: View {
                 contentOpacity: fade,
                 cornerRadius: cornerRadius
             )
+            // The shell above is the whole drag: every sample rewrites the wheel's
+            // rotation, which re-renders this card. None of it reaches the face —
+            // same collection, same size, same opacity — so the check below stops
+            // the image, the scrim's radial mask and the title from being rebuilt
+            // sixty times a second while nothing about them has moved.
+            .equatable()
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(.white.opacity(isExpanded ? 0 : 0.2), lineWidth: 1)
@@ -372,8 +452,8 @@ private struct OrbitCard: View {
             .onTapGesture { onExpand(index) }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 12, coordinateSpace: .local)
-                    .onChanged { onDismissChange($0.translation) }
-                    .onEnded { onDismissEnd($0, geo) }
+                    .onChanged { onDragChange($0.translation) }
+                    .onEnded { onDragEnd($0, geo) }
             )
             .accessibilityLabel(Text(collection.title))
             .accessibilityHint(isExpanded ? "Swipe up to dismiss" : "Double tap to open")
@@ -384,7 +464,13 @@ private struct OrbitCard: View {
 // MARK: - Card Face
 
 /// Static content: image, material scrim, title, and (when expanded) pager.
-/// Inputs never change during disk drags, so re-evaluation diffs to nothing.
+///
+/// Equatable on purpose, and written by hand because the focus is a shared
+/// object: identity is the right comparison for it, and every other input is a
+/// value. Turning a disk rewrites the wheel's rotation, which rebuilds every
+/// card around it, and a disk drag does all of that sixty times a second without
+/// touching one of these inputs. Equating them makes the skip explicit instead
+/// of leaving it to the diff.
 private struct CardFace: View {
     let collection: Collection
     let focus: CollectionFocus
@@ -444,6 +530,17 @@ private struct CardFace: View {
                 endRadius: size.width * 0.9
             )
         )
+    }
+}
+
+extension CardFace: Equatable {
+    static func == (a: CardFace, b: CardFace) -> Bool {
+        a.collection == b.collection
+            && a.focus === b.focus
+            && a.size == b.size
+            && a.isExpanded == b.isExpanded
+            && a.contentOpacity == b.contentOpacity
+            && a.cornerRadius == b.cornerRadius
     }
 }
 
