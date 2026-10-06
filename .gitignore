@@ -1,16 +1,10 @@
-# macOS
 .DS_Store
 
-# Xcode per-user state. This project uses file-system synchronized groups, so
-# new source files need no project edit and there is nothing here worth sharing.
 xcuserdata/
 *.xcuserstate
 
-# Build output
 DerivedData/
 build/
 
-# SwiftPM / tool caches
 .build/
 textures/
-ERRORS.md

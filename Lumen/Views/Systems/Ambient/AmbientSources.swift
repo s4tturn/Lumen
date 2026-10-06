@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// A loopable sound. A plain value: nothing here touches the actor, so the
-/// type opts out of the project's default isolation and can be read from the
-/// background decode that warms these files.
 nonisolated struct AmbientSource: Identifiable, Sendable {
-    /// Stable across rebuilds — never a fresh UUID per render (morph/id rule).
+
     var id: String { resourceName }
     let name: String
     let icon: String
