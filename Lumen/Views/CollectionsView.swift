@@ -123,7 +123,7 @@ struct CollectionsView: View {
 
 @MainActor @Observable
 final class CollectionsModel {
-    var rotation = 0.0
+    var rotation = 0.0            // kept within [-180, 180] so the orbit never spins the long way
     var expanded: Int?
     var front: Int?
     var dismiss: CGFloat = 0
@@ -133,7 +133,6 @@ final class CollectionsModel {
     @ObservationIgnored var fingerAngle = 0.0
     @ObservationIgnored var fingerTime = Date.distantPast
     @ObservationIgnored var velocity = 0.0
-    @ObservationIgnored var epoch = 0
 
     var focused: Int {
         let raw = Int(round(-rotation / CollectionCatalog.spacing))
@@ -141,35 +140,50 @@ final class CollectionsModel {
         return ((raw % count) + count) % count
     }
 
+    /// Wraps any angle into [-180, 180].
+    func normalized(_ degrees: Double) -> Double {
+        var d = degrees.truncatingRemainder(dividingBy: 360)
+        while d > 180 { d -= 360 }
+        while d < -180 { d += 360 }
+        return d
+    }
+
+    /// Keeps `rotation` wrapped so card rotation and orbit position always animate
+    /// along the shortest path instead of spinning multiple turns.
+    func normalizeRotation() {
+        rotation = normalized(rotation)
+    }
+
+    /// The multiple-of-360 shift of the destination closest to `rotation`, so a
+    /// settle or flick never interpolates more than half a turn.
+    private func destinationClosest(to target: Int) -> Double {
+        var destination = Double(-target) * CollectionCatalog.spacing
+        while destination - rotation > 180 { destination -= 360 }
+        while destination - rotation < -180 { destination += 360 }
+        return destination
+    }
+
     func settle(_ target: Int, animation: Animation) {
-        epoch += 1
-        let current = epoch
+        normalizeRotation()
+        let destination = destinationClosest(to: target)
         withAnimation(animation) {
-            rotation = Double(-target) * CollectionCatalog.spacing
+            rotation = destination
         } completion: {
-            self.fold(epoch: current)
+            self.normalizeRotation()
         }
         ridge = target
     }
 
     func flick(to target: Int, animation: (Double) -> Animation) {
-        epoch += 1
-        let current = epoch
-        let destination = Double(-target) * CollectionCatalog.spacing
+        normalizeRotation()
+        let destination = destinationClosest(to: target)
         let remaining = destination - rotation
         withAnimation(animation(remaining == 0 ? 0 : velocity / remaining)) {
             rotation = destination
         } completion: {
-            self.fold(epoch: current)
+            self.normalizeRotation()
         }
         ridge = target
-    }
-
-    func fold(epoch: Int) {
-        guard epoch == self.epoch, expanded == nil, !dragging else { return }
-        let turns = -Int(round(rotation / 360))
-        guard turns != 0 else { return }
-        withTransaction(Transaction()) { rotation += 360 * Double(turns) }
     }
 }
 
