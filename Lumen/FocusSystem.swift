@@ -40,10 +40,6 @@ enum FocusSystem: String, CaseIterable {
 
     var isInteractive: Bool { self != .hidden }
 
-
-    /// Spring driving blur, scale, and opacity — gated by
-    /// `UIConstants.Animation.reduceMotionGate` in `FocusEffect` when Reduce
-    /// Motion is on. Focusing in snaps responsively; receding yields fluidly.
     var animation: Animation {
         switch self {
         case .visible: return UIConstants.Animation.commit
@@ -93,9 +89,7 @@ struct FocusEffect: ViewModifier {
         let animation = UIConstants.Animation.reduceMotionGate(state.animation, reduceMotion: reduceMotion)
         Group {
             if state.blur > 0 {
-                // Offscreen only when there is a blur to isolate: Navigation
-                // sits `.visible` for the whole session after launch, and a
-                // full-screen compositing group is real GPU memory for nothing.
+
                 content
                     .compositingGroup()
                     .blur(radius: state.blur)

@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// Every collection in the app, and the facts derived from having them all in
-/// one list.
-///
-/// A `static let` literal on purpose: the catalog is fixed content, so it is
-/// built once, is safe to read from any isolation domain, and can never be
-/// mutated behind a view's back. Adding a wheel slot means adding an entry here
-/// and nothing else — every count, angle and index in the feature reads the
-/// derived values below rather than restating a number.
 enum CollectionCatalog {
     static let all: [Collection] = [
         Collection(
@@ -83,38 +75,18 @@ enum CollectionCatalog {
         )
     ]
 
-    /// How many slots the wheel has.
     static var count: Int { all.count }
 
-    /// Degrees between adjacent wheel slots.
-    ///
-    /// Read from the catalog rather than restated, so the wheel, its detent
-    /// marks and every snap calculation cannot fall out of step: adding a
-    /// collection moves all three together.
     static let spacing: Double = 360 / Double(all.count)
 
-    /// The task with this identity, and the collection that owns it.
     static func entry(for id: CollectionTask.ID) -> (Collection, CollectionTask)? {
         index[id]
     }
 
-    /// Resolves task identities back to the content they name, **in the order
-    /// given** — callers order the list, not the catalog.
-    ///
-    /// Identities the catalog no longer contains are dropped rather than
-    /// trapped: a completion syncs to every device on the account, so one of
-    /// them may be running a build whose catalog has dropped or renamed the
-    /// task. Such a completion stays in the keychain and reappears if the
-    /// content ever returns, but it must not break the view listing them.
     static func locate(_ ids: some Sequence<CollectionTask.ID>) -> [(Collection, CollectionTask)] {
         ids.compactMap { entry(for: $0) }
     }
 
-    /// Identity → owning collection and task, built once on first use.
-    ///
-    /// Duplicates resolve to the last one rather than trapping: the keys are
-    /// hand-written, and a future content edit that collides should cost one
-    /// shadowed task, not a launch crash.
     private static let index: [CollectionTask.ID: (Collection, CollectionTask)] = {
         var built: [CollectionTask.ID: (Collection, CollectionTask)] = [:]
         for collection in all {
