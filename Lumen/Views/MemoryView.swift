@@ -134,6 +134,9 @@ private struct MemoryPanel: View {
             .regular,
             in: ConcentricRectangle(corners: .concentric(minimum: .fixed(cornerRadius)), isUniform: true)
         )
+        // The panel's own surface and inset: where the log sits
+        // inside the page, and the curve its rows nest under.
+        .debugSurfaceBorder(ConcentricRectangle(corners: .concentric(minimum: .fixed(cornerRadius)), isUniform: true))
         .accessibilityElement(children: .contain)
     }
 }
@@ -157,6 +160,9 @@ private struct MemoryHeader: View {
             .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        // The title block's frame: how far down the page the log's
+        // header sits.
+        .debugSurfaceBorder()
         .accessibilityElement(children: .combine)
     }
 }
@@ -216,6 +222,9 @@ private struct MemoryRow: View {
             .regular,
             in: ConcentricRectangle(corners: .concentric(minimum: .fixed(cornerRadius)), isUniform: true)
         )
+        // One row's own surface: the completion's frame inside the
+        // panel, at the panel's own nested curve.
+        .debugSurfaceBorder(ConcentricRectangle(corners: .concentric(minimum: .fixed(cornerRadius)), isUniform: true))
         .transition(rowTransition)
         // One element rather than four, so VoiceOver reads a completion as the
         // single thing it is instead of as fragments.
@@ -250,6 +259,9 @@ private struct MemoryEmptyState: View {
             .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The empty state's frame: the panel-sized hole the first
+        // completion fills.
+        .debugSurfaceBorder()
         .accessibilityElement(children: .combine)
     }
 }

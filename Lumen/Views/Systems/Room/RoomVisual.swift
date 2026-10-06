@@ -54,12 +54,14 @@ struct RoomTab: View {
                     }
                 }
             }
+            // The row's own extent: the whole switcher, credits button
+            // included, at its clearance from the page's top.
+            .debugSurfaceBorder()
         }
     }
 }
 
-/// One room's tab: a symbol that fills when it is on, swapping
-/// to its fill spelling layer by layer when the selection moves.
+/// One room's tab: a symbol that fills when it is on.
 /// The tab is compressed to just the symbol for space efficiency.
 private struct RoomTabButton: View {
     let scene: RoomScene
@@ -67,26 +69,9 @@ private struct RoomTabButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button {
-            // A tap commits a selection, so it rides the commit
-            // spring. That transaction is also what carries the
-            // symbol's swap below: a content transition only
-            // animates inside an animation context. The room's
-            // own switch runs on the stage's task, outside this
-            // transaction, so the spring never reaches it.
-            withAnimation(UIConstants.Animation.commit) { action() }
-        } label: {
-            // The symbol swaps by NAME, not by variant, so the
-            // swap is a content change — and the replace effect
-            // then morphs the outline symbol's layers into the
-            // fill symbol's, each layer separately, on every
-            // switch. Selected draws the fill; unselected the
-            // outline.
-            Image(systemName: isSelected ? scene.filledSymbol : scene.symbol)
-                .contentTransition(.symbolEffect(.replace.byLayer))
-                // First appearance, like every symbol in Lumen:
-                // each layer its own beat.
-                .symbolEffect(.appear.byLayer, isActive: true)
+        Button(action: action) {
+            Image(systemName: scene.symbol)
+                .symbolVariant(isSelected ? .fill : .none)
                 .font(.system(size: RoomTabMetrics.fontSize, weight: .medium))
                 .foregroundStyle(.primary)
                 .frame(minWidth: RoomTabMetrics.minimumHeight, minHeight: RoomTabMetrics.minimumHeight)
@@ -107,6 +92,34 @@ private struct RoomTabButton: View {
         .debugSurfaceBorder()
     }
 }
+
+// MARK: - Metrics
+
+/// The tab row's dimensions, in one place. Read by `RoomView` as well as here,
+/// because the row's clearance from the top of the page is the page's business
+/// and this is where the number it uses lives.
+enum RoomTabMetrics {
+    /// Zero, so the tabs share one sampling region and never merge. Any value at
+    /// or above the gap between them fuses them into a single shape.
+    static let containerSpacing: CGFloat = 0
+
+    /// Gap between tabs. Wider than a hairline so three glass capsules stay three
+    /// capsules, narrow enough that the row reads as one control.
+    static let gap: CGFloat = 6
+
+    /// At least a fingertip tall.
+    static let minimumHeight: CGFloat = 44
+
+    static let fontSize: CGFloat = 17
+
+    /// Clearance between the top of the page and the top of the row, as a
+    /// fraction of the page's height. Proportional because the page ignores the
+    /// safe area, so nothing in this tree can ask how tall the island is — the
+    /// same reasoning `MemoryView` uses for its own top chrome, and for the same
+    /// reason: a fraction of the screen moves with the screen.
+    static let topFraction: CGFloat = 0.075
+}
+import SwiftUI
 
 // MARK: - Turn Handle
 
@@ -229,31 +242,4 @@ struct RoomTurnHandle: View {
                 stage.turn(byRadians: radians)
             }
     }
-}
-
-// MARK: - Metrics
-
-/// The tab row's dimensions, in one place. Read by `RoomView` as well as here,
-/// because the row's clearance from the top of the page is the page's business
-/// and this is where the number it uses lives.
-enum RoomTabMetrics {
-    /// Zero, so the tabs share one sampling region and never merge. Any value at
-    /// or above the gap between them fuses them into a single shape.
-    static let containerSpacing: CGFloat = 0
-
-    /// Gap between tabs. Wider than a hairline so three glass capsules stay three
-    /// capsules, narrow enough that the row reads as one control.
-    static let gap: CGFloat = 6
-
-    /// At least a fingertip tall.
-    static let minimumHeight: CGFloat = 44
-
-    static let fontSize: CGFloat = 17
-
-    /// Clearance between the top of the page and the top of the row, as a
-    /// fraction of the page's height. Proportional because the page ignores the
-    /// safe area, so nothing in this tree can ask how tall the island is — the
-    /// same reasoning `MemoryView` uses for its own top chrome, and for the same
-    /// reason: a fraction of the screen moves with the screen.
-    static let topFraction: CGFloat = 0.075
 }

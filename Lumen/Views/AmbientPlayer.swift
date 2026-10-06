@@ -5,7 +5,7 @@ import SwiftUI
 /// Every dimension the transport's controls share, in one place, so the
 /// compact pill, the volume pill, the complete control and the completed
 /// state cannot drift apart in height, corner radius or resting inset.
-private enum Metrics {
+enum Metrics {
     /// Outer inset of the expanded band: how far the band itself sits from
     /// the screen's edge. Single value so the band's width, its bottom inset
     /// and the gesture area's reach can never drift apart.
@@ -185,13 +185,34 @@ struct AmbientPlayer: View {
     private var content: some View {
         if let task = visibleTask {
             if completions.isCompleted(task.id) {
-                undoControl(for: task)
+                UndoControl(
+                    task: task,
+                    hapticTrigger: $hapticTrigger,
+                    transition: contentTransition,
+                    morph: morphTransition,
+                    namespace: morphNamespace
+                )
             } else {
-                completeControl(for: task)
+                CompleteControl(
+                    task: task,
+                    hapticTrigger: $hapticTrigger,
+                    transition: contentTransition,
+                    morph: morphTransition,
+                    namespace: morphNamespace
+                )
             }
         } else {
             switch state {
-            case .expanded: expandedBand
+            case .expanded:
+                ExpandedBand(
+                    engine: engine,
+                    screenRadius: screenCornerRadius,
+                    width: measuredWidth,
+                    highlightedID: highlightedSourceID,
+                    transition: contentTransition,
+                    morph: morphTransition,
+                    namespace: morphNamespace
+                )
             case .volume: volumePill
             case .compact: compactPill
             }
@@ -214,146 +235,6 @@ struct AmbientPlayer: View {
             .glassEffectID("volume", in: morphNamespace)
             .glassEffectTransition(morphTransition)
             .padding(.bottom, Metrics.restingBottomPadding)
-    }
-
-    private func completeControl(for task: CollectionTask) -> some View {
-        Button {
-            // The store answers on this frame and the keychain write follows it,
-            // so the morph is the tap's own feedback rather than a wait on
-            // `securityd`.
-            withAnimation(motion(UIConstants.Animation.dwell)) { completions.complete(task.id) }
-            hapticTrigger += 1
-        } label: {
-            Text("Complete")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: Metrics.completeWidth, height: Metrics.pillHeight)
-                .transition(contentTransition)
-        }
-        .buttonStyle(.plain)
-        .contentShape(Metrics.pillShape)
-        .accessibilityLabel("Complete")
-        // Which task, announced: the button acts on one specific task, and the
-        // card holding it is not where VoiceOver’s focus is.
-        .accessibilityValue(Text(task.title))
-        .accessibilityAddTraits(.isButton)
-        .glassEffect(.clear.interactive(), in: Metrics.pillShape)
-        .glassEffectID("completionPill", in: morphNamespace)
-        .glassEffectTransition(morphTransition)
-        .padding(.bottom, Metrics.restingBottomPadding)
-        .debugSurfaceBorder(Metrics.pillShape)
-    }
-
-    private func undoControl(for task: CollectionTask) -> some View {
-        // The trash sits a full resting inset clear of the word, so the two
-        // read as separate controls rather than as one row of text.
-        HStack(spacing: Metrics.restingBottomPadding) {
-            Button {
-                withAnimation(motion(UIConstants.Animation.commit)) { completions.undo(task.id) }
-                hapticTrigger += 1
-            } label: {
-                Image(systemName: "trash")
-                    // First appearance, like every symbol in Lumen:
-                    // each layer its own beat.
-                    .symbolEffect(.appear.byLayer, isActive: true)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.red)
-                    .frame(width: Metrics.trashDiameter, height: Metrics.trashDiameter)
-                    .transition(contentTransition)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Circle())
-            .accessibilityLabel("Undo completion")
-            .accessibilityValue(Text(task.title))
-            .accessibilityAddTraits(.isButton)
-            .glassEffect(.clear.tint(.red).interactive(), in: Circle())
-            .glassEffectID("completionTrash", in: morphNamespace)
-            .glassEffectTransition(morphTransition)
-            .debugSurfaceBorder(Circle())
-
-            Text("Completed")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: Metrics.completedWidth, height: Metrics.pillHeight)
-                .transition(contentTransition)
-                .contentShape(Metrics.pillShape)
-                .accessibilityLabel("Completed")
-                .accessibilityValue(Text(task.title))
-                .glassEffect(.clear.interactive(), in: Metrics.pillShape)
-                .glassEffectID("completionPill", in: morphNamespace)
-        }
-        .padding(.bottom, Metrics.restingBottomPadding)
-    }
-
-    private var expandedBand: some View {
-        let bandCornerRadius = Metrics.bandCornerRadius(screenRadius: screenCornerRadius)
-        return VStack(alignment: .center, spacing: 0) {
-            Text("Ambient Sources")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
-                .transition(contentTransition)
-
-            VStack(spacing: 8) {
-                ForEach(AmbientSource.all) { source in
-                    SourceCard(
-                        source: source,
-                        isPlaying: engine.currentSource?.id == source.id,
-                        isHovered: highlightedSourceID == source.id,
-                        cornerRadius: Metrics.rowCornerRadius(screenRadius: screenCornerRadius)
-                    )
-                    .background {
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: SourceCardFrameKey.self,
-                                value: [source.id: geo.frame(in: .named("AmbientPlayer"))]
-                            )
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, Metrics.expandedInnerPadding)
-            .padding(.bottom, Metrics.expandedInnerPadding)
-            .transition(contentTransition)
-        }
-        // No fixed height: the band hugs its content (title + cards + the
-        // identical inner padding on all sides) instead of compressing it
-        // into a rigid frame and eating the bottom inset.
-        .frame(
-            width: measuredWidth - 2 * Metrics.expandedOuterPadding,
-            alignment: .top
-        )
-        // The band publishes its own glass geometry as the rows' container.
-        // Same radius as the glass below, so rows share the glass's center and
-        // nest by inset: the band's radius less the 5pt inner padding at its
-        // corners, and no more than that further in.
-        //
-        // The container is the one surface that could not be a
-        // `ConcentricRectangle` even if we wanted it: `containerShape` takes a
-        // `RoundedRectangularShape`, which `ConcentricRectangle` does not
-        // conform to (Shape only). It carries the same radius as a fixed rounded
-        // rectangle, so the three surfaces agree on one number and only the
-        // glass additionally pins per-corner variation out — see below.
-        .containerShape(RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous))
-        .contentShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(bandCornerRadius))))
-        // The glass itself takes a FIXED rounded rectangle, not a concentric one,
-        // even though it shares the concentric radius above. Apple's Liquid Glass
-        // examples only ever place fixed shapes in `glassEffect(in:)`: a
-        // container-relative shape there does not resolve on the interactive
-        // layer, and the material falls back to capsule-like geometry — a second,
-        // hyper-rounded pill reads inside the band. `.interactive()` is what
-        // surfaces it. The radius is still the concentric one, so the band's
-        // curve is unchanged; only the spelling differs, and the container and
-        // hit area above keep the concentric form because neither renders glass.
-        .glassEffect(
-            .clear.interactive(),
-            in: RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous)
-        )
-        .glassEffectID("expanded", in: morphNamespace)
-        .glassEffectTransition(morphTransition)
-        .padding(.bottom, Metrics.expandedOuterPadding)
-        .debugSurfaceBorder(RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous))
     }
 
     private func toggle() {
@@ -433,19 +314,28 @@ struct AmbientPlayer: View {
             content.blur(radius: radius).opacity(opacity).scaleEffect(scale)
         }
     }
+}
 
-    private struct SourceCardFrameKey: PreferenceKey {
-        static var defaultValue: [AmbientSource.ID: CGRect] { [:] }
-        static func reduce(
-            value: inout [AmbientSource.ID: CGRect],
-            nextValue: () -> [AmbientSource.ID: CGRect]
-        ) {
-            value.merge(nextValue(), uniquingKeysWith: { $1 })
-        }
+/// The band's rows publish the frame of each source card, in the
+/// player's own coordinate space, so the vertical drag can ask which
+/// card a touch is over without the player reading any card's geometry.
+/// Written by `ExpandedBand`, read by `AmbientPlayer`.
+struct SourceCardFrameKey: PreferenceKey {
+    static var defaultValue: [AmbientSource.ID: CGRect] { [:] }
+    static func reduce(
+        value: inout [AmbientSource.ID: CGRect],
+        nextValue: () -> [AmbientSource.ID: CGRect]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
-private struct CompactPill: View {
+
+// MARK: - Compact pill
+
+/// The resting transport: one glass pill that plays and pauses, and grows
+/// into the expanded band or the volume pill from its own place.
+struct CompactPill: View {
     let engine: AmbientEngine
     let width: CGFloat
     let transition: AnyTransition
@@ -456,13 +346,10 @@ private struct CompactPill: View {
     var body: some View {
         ZStack {
             // One row whose content changes with the play state, rather
-            // than two layouts crossfading over each other. The source
+            // than two layouts crossfading over each other: the source
             // tile and name insert and remove on the state change, and
-            // the transport icon is a single symbol that swaps between
-            // its play and pause spellings by name — so the swap is a
-            // content change, and the replace effect morphs one symbol's
-            // layers into the other's, each layer separately, on the
-            // same transaction the toggle runs in.
+            // the transport icon swaps between its play and pause
+            // spellings.
             HStack(spacing: 0) {
                 if engine.isPlaying {
                     Metrics.iconShape
@@ -472,13 +359,6 @@ private struct CompactPill: View {
                             Image(systemName: engine.currentSource?.icon ?? "music.note")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white)
-                                // A source change is a content change too:
-                                // the new glyph's layers replace the old
-                                // one's, separately.
-                                .contentTransition(.symbolEffect(.replace.byLayer))
-                                // First appearance, like every symbol in
-                                // Lumen: each layer its own beat.
-                                .symbolEffect(.appear.byLayer, isActive: true)
                         }
                         .transition(transition)
 
@@ -494,10 +374,6 @@ private struct CompactPill: View {
 
                 Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 20, weight: .medium))
-                    .contentTransition(.symbolEffect(.replace.byLayer))
-                    // First appearance, like every symbol in Lumen:
-                    // each layer its own beat.
-                    .symbolEffect(.appear.byLayer, isActive: true)
                     .foregroundStyle(.white)
                     .frame(width: 20, height: 20)
             }
@@ -521,7 +397,12 @@ private struct CompactPill: View {
     }
 }
 
-private struct VolumePill: View {
+
+// MARK: - Volume pill
+
+/// The volume control the horizontal drag grows out of the compact pill:
+/// a shorter glass capsule with the level drawn inside it.
+struct VolumePill: View {
     let engine: AmbientEngine
     let width: CGFloat
     let transition: AnyTransition
@@ -545,18 +426,110 @@ private struct VolumePill: View {
     }
 }
 
-private struct SourceCard: View {
+
+// MARK: - Expanded band
+
+/// The expanded transport: the ambient sources, listed.
+///
+/// No fixed height: the band hugs its content (title + cards + the
+/// identical inner padding on all sides) instead of compressing it
+/// into a rigid frame and eating the bottom inset.
+struct ExpandedBand: View {
+    let engine: AmbientEngine
+    /// The screen's own corner radius, read by the player at the outermost
+    /// point in the tree still resolving against the screen container and
+    /// handed down, so the band and its rows derive their floors from the
+    /// one number.
+    let screenRadius: CGFloat
+    /// The player's measured width, which the band is inset from.
+    let width: CGFloat
+    /// The source the vertical drag is currently over, if any.
+    let highlightedID: AmbientSource.ID?
+    let transition: AnyTransition
+    let morph: GlassEffectTransition
+    let namespace: Namespace.ID
+
+    var body: some View {
+        let bandCornerRadius = Metrics.bandCornerRadius(screenRadius: screenRadius)
+        return VStack(alignment: .center, spacing: 0) {
+            Text("Ambient Sources")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+                .transition(transition)
+
+            VStack(spacing: 8) {
+                ForEach(AmbientSource.all) { source in
+                    SourceCard(
+                        source: source,
+                        isPlaying: engine.currentSource?.id == source.id,
+                        isHovered: highlightedID == source.id,
+                        cornerRadius: Metrics.rowCornerRadius(screenRadius: screenRadius)
+                    )
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: SourceCardFrameKey.self,
+                                value: [source.id: geo.frame(in: .named("AmbientPlayer"))]
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Metrics.expandedInnerPadding)
+            .padding(.bottom, Metrics.expandedInnerPadding)
+            .transition(transition)
+        }
+        .frame(
+            width: width - 2 * Metrics.expandedOuterPadding,
+            alignment: .top
+        )
+        // The band publishes its own glass geometry as the rows' container.
+        // Same radius as the glass below, so rows share the glass's center and
+        // nest by inset: the band's radius less the 5pt inner padding at its
+        // corners, and no more than that further in.
+        //
+        // The container is the one surface that could not be a
+        // `ConcentricRectangle` even if we wanted it: `containerShape` takes a
+        // `RoundedRectangularShape`, which `ConcentricRectangle` does not
+        // conform to (Shape only). It carries the same radius as a fixed rounded
+        // rectangle, so the three surfaces agree on one number and only the
+        // glass additionally pins per-corner variation out — see below.
+        .containerShape(RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous))
+        .contentShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(bandCornerRadius))))
+        // The glass itself takes a FIXED rounded rectangle, not a concentric one,
+        // even though it shares the concentric radius above. Apple's Liquid Glass
+        // examples only ever place fixed shapes in `glassEffect(in:)`: a
+        // container-relative shape there does not resolve on the interactive
+        // layer, and the material falls back to capsule-like geometry — a second,
+        // hyper-rounded pill reads inside the band. `.interactive()` is what
+        // surfaces it. The radius is still the concentric one, so the band's
+        // curve is unchanged; only the spelling differs, and the container and
+        // hit area above keep the concentric form because neither renders glass.
+        .glassEffect(
+            .clear.interactive(),
+            in: RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous)
+        )
+        .glassEffectID("expanded", in: namespace)
+        .glassEffectTransition(morph)
+        .padding(.bottom, Metrics.expandedOuterPadding)
+        .debugSurfaceBorder(RoundedRectangle(cornerRadius: bandCornerRadius, style: .continuous))
+    }
+}
+
+
+// MARK: - Source card
+
+/// One ambient source, as the expanded band lists it: a tile, a name, and
+/// the checkmark of the source that is playing.
+struct SourceCard: View {
     let source: AmbientSource
     let isPlaying: Bool
     let isHovered: Bool
     /// Floor under this row's concentric radius, derived once by the band from
     /// the screen's radius and both of the band's insets.
     let cornerRadius: CGFloat
-
-    /// Whether the pointer is hovering over the card. Nothing hovers on
-    /// iPhone; on iPad with a pointer it joins the drag's own hover in
-    /// driving the icon's wiggle.
-    @State private var isPointerHovered = false
 
     /// Row body. `ConcentricRectangle` against the band's published container,
     /// floored at `cornerRadius`: rows near the band's corners resolve the
@@ -587,11 +560,6 @@ private struct SourceCard: View {
                     Image(systemName: source.icon)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
-                        // The hover reaction: a wiggle, layer by
-                        // layer, for as long as the card is hovered —
-                        // by the pointer, or by the drag that holds
-                        // the row under the finger.
-                        .symbolEffect(.wiggle.byLayer, isActive: isHovered || isPointerHovered)
                 }
 
             Text(source.name)
@@ -602,9 +570,6 @@ private struct SourceCard: View {
 
             if isPlaying {
                 Image(systemName: "checkmark.circle.fill")
-                    // First appearance, like every symbol in Lumen:
-                    // each layer its own beat.
-                    .symbolEffect(.appear.byLayer, isActive: true)
                     .foregroundStyle(.white.opacity(0.9))
                     .frame(width: 20, height: 20)
                     .padding(.trailing, 8)
@@ -629,7 +594,110 @@ private struct SourceCard: View {
             highlightShape.stroke(.white.opacity(isHovered ? 0.5 : 0), lineWidth: 1.5)
         }
         .scaleEffect(isHovered ? 1.02 : 1)
-        .onHover { isPointerHovered = $0 }
         .debugSurfaceBorder(cardShape)
+    }
+}
+
+
+// MARK: - Complete
+
+/// The control that replaces the transport while a collection is open
+/// and its task is unfinished: offers to complete the task on screen.
+///
+/// The store answers on this frame and the keychain write follows it,
+/// so the morph is the tap's own feedback rather than a wait on
+/// `securityd`.
+struct CompleteControl: View {
+    @Environment(CollectionStore.self) private var completions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let task: CollectionTask
+    /// The player's haptic tick, bumped when the completion lands so the
+    /// tick rides the tap's own animation rather than a timer beside it.
+    @Binding var hapticTrigger: Int
+    let transition: AnyTransition
+    let morph: GlassEffectTransition
+    let namespace: Namespace.ID
+
+    var body: some View {
+        Button {
+            withAnimation(UIConstants.Animation.reduceMotionGate(UIConstants.Animation.dwell, reduceMotion: reduceMotion)) { completions.complete(task.id) }
+            hapticTrigger += 1
+        } label: {
+            Text("Complete")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Metrics.completeWidth, height: Metrics.pillHeight)
+                .transition(transition)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Metrics.pillShape)
+        .accessibilityLabel("Complete")
+        // Which task, announced: the button acts on one specific task, and the
+        // card holding it is not where VoiceOver's focus is.
+        .accessibilityValue(Text(task.title))
+        .accessibilityAddTraits(.isButton)
+        .glassEffect(.clear.interactive(), in: Metrics.pillShape)
+        .glassEffectID("completionPill", in: namespace)
+        .glassEffectTransition(morph)
+        .padding(.bottom, Metrics.restingBottomPadding)
+        .debugSurfaceBorder(Metrics.pillShape)
+    }
+}
+
+// MARK: - Completed
+
+/// What a finished task leaves at the bottom: the word, and the way back
+/// out of it.
+///
+/// Undoing restores the transport on the same frame the store rolls the
+/// completion back, and it stays there until the card closes.
+struct UndoControl: View {
+    @Environment(CollectionStore.self) private var completions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let task: CollectionTask
+    /// The player's haptic tick, bumped when the completion is undone.
+    @Binding var hapticTrigger: Int
+    let transition: AnyTransition
+    let morph: GlassEffectTransition
+    let namespace: Namespace.ID
+
+    var body: some View {
+        // The trash sits a full resting inset clear of the word, so the two
+        // read as separate controls rather than as one row of text.
+        HStack(spacing: Metrics.restingBottomPadding) {
+            Button {
+                withAnimation(UIConstants.Animation.reduceMotionGate(UIConstants.Animation.commit, reduceMotion: reduceMotion)) { completions.undo(task.id) }
+                hapticTrigger += 1
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .frame(width: Metrics.trashDiameter, height: Metrics.trashDiameter)
+                    .transition(transition)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .accessibilityLabel("Undo completion")
+            .accessibilityValue(Text(task.title))
+            .accessibilityAddTraits(.isButton)
+            .glassEffect(.clear.tint(.red).interactive(), in: Circle())
+            .glassEffectID("completionTrash", in: namespace)
+            .glassEffectTransition(morph)
+            .debugSurfaceBorder(Circle())
+
+            Text("Completed")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Metrics.completedWidth, height: Metrics.pillHeight)
+                .transition(transition)
+                .contentShape(Metrics.pillShape)
+                .accessibilityLabel("Completed")
+                .accessibilityValue(Text(task.title))
+                .glassEffect(.clear.interactive(), in: Metrics.pillShape)
+                .glassEffectID("completionPill", in: namespace)
+        }
+        .padding(.bottom, Metrics.restingBottomPadding)
     }
 }
