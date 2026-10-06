@@ -42,12 +42,12 @@ enum FocusSystem: String, CaseIterable {
 
 
     /// Spring driving blur, scale, and opacity — gated by
-    /// `UIConstants.Animation.motionGate` in `FocusEffect` when Reduce Motion
-    /// is on. Focusing in snaps responsively; receding yields fluidly.
+    /// `UIConstants.Animation.reduceMotionGate` in `FocusEffect` when Reduce
+    /// Motion is on. Focusing in snaps responsively; receding yields fluidly.
     var animation: Animation {
         switch self {
-        case .visible: return UIConstants.Animation.snappySpring
-        case .subdued, .hidden: return UIConstants.Animation.smoothSpring
+        case .visible: return UIConstants.Animation.commit
+        case .subdued, .hidden: return UIConstants.Animation.dwell
         }
     }
 }
@@ -90,8 +90,7 @@ struct FocusEffect: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        let motion = UIConstants.Animation.motionGate(state.animation, reduceMotion: reduceMotion)
-        let fade = UIConstants.Animation.motionGate(state.animation, reduceMotion: reduceMotion)
+        let animation = UIConstants.Animation.reduceMotionGate(state.animation, reduceMotion: reduceMotion)
         Group {
             if state.blur > 0 {
                 // Offscreen only when there is a blur to isolate: Navigation
@@ -105,9 +104,8 @@ struct FocusEffect: ViewModifier {
             }
         }
             .scaleEffect(state.scale, anchor: anchor)
-            .animation(motion, value: state)
             .opacity(state.opacity)
-            .animation(fade, value: state)
+            .animation(animation, value: state)
             .allowsHitTesting(state.isInteractive)
             .accessibilityHidden(state == .hidden)
     }

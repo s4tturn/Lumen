@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// One blob character: field speed and wobble amount. Size and leg lengths
 /// live in `UIConstants.Breathe`, which owns the whole breath vocabulary.
@@ -57,8 +56,11 @@ struct BreatheView: View {
     @State private var awaitingRelease = false
     @State private var progressStart: Date? = nil
     @State private var progressDuration = UIConstants.Breathe.breatheInhaleDuration
-    /// 0 = blob follows the finger 1:1, 100 = blob stays pinned.
-    private let damping = 80.0
+    /// How much of its own travel the blob keeps under the finger — 0 moves it
+    /// 1:1 with the finger, 100 leaves it pinned. A cosine ease, precomputed:
+    /// the constant is fixed, so the `cos` is paid once rather than per drag
+    /// sample, and the curve is flat at both ends so nothing snaps.
+    private static let followFactor: Double = 0.5 * (1.0 + cos(.pi * 80.0 / 100.0))
     private static let morphDuration = 0.25
     /// How small the blob draws under a finger. Applied to whatever size it
     /// currently is, so it reads as this blob holding itself in rather than
@@ -71,16 +73,14 @@ struct BreatheView: View {
     /// commitment leaves no gap, which is a legitimate thing to hear.
     private static let holdDuration: TimeInterval = 1.0
 
-    /// Shared generators — created once (Apple HIG). The thump is now the only
-    /// discrete impact left in the app: both holds ramp and both fall silent, so
-    /// the thump is the only moment that lands as a single hit.
-    private let thump = UIImpactFeedbackGenerator(style: .heavy)
-    private let ramp = HoldRamp()
+    /// The gesture's haptics, owned once so a re-created view keeps them:
+    /// a generator is built to be kept, not rebuilt.
+    @State private var feedback = BreathFeedback()
 
     /// The blob tenses and lets go on the commit character rather than the morph
     /// one — this is the touch answering back, and it should read as immediate.
     private var pressSpring: Animation {
-        UIConstants.Animation.motionGate(UIConstants.Animation.snappySpring, reduceMotion: reduceMotion)
+        UIConstants.Animation.reduceMotionGate(UIConstants.Animation.commit, reduceMotion: reduceMotion)
     }
 
     var body: some View {
@@ -97,7 +97,7 @@ struct BreatheView: View {
                     excited: .white,
                     excitedBlend: 1.0,
                     excitedMix: isExcited ? 1.0 : 0.0,
-                    morphDuration: reduceMotion ? 0.15 : Self.morphDuration,
+                    morphDuration: reduceMotion ? UIConstants.Animation.reducedDuration : Self.morphDuration,
                     displacementDuration: displacementDuration,
                     radiusDuration: radiusDuration,
                     speed: reduceMotion ? 0 : speed,
@@ -109,6 +109,12 @@ struct BreatheView: View {
                     progressDuration: progressDuration,
                     isLive: isLive
                 )
+                // The drag writes `offset` on every sample, which re-renders this
+                // page — but the offset is applied outside the equality check, so
+                // a move that leaves the blob's own parameters alone skips its
+                // body entirely instead of rebuilding the canvas hierarchy. The
+                // picture is identical either way; only the work differs.
+                .equatable()
                 .offset(offset)
                 .allowsHitTesting(false)
                 // Anchored to the blob, not the screen: the same translation the
@@ -143,7 +149,10 @@ struct BreatheView: View {
                                 // keeps doing so once the thump has armed it, for
                                 // as long as the finger stays down.
                                 let t = value.translation
-                                offset = CGSize(width: t.width * followFactor, height: t.height * followFactor)
+                                offset = CGSize(
+                                    width: t.width * Self.followFactor,
+                                    height: t.height * Self.followFactor
+                                )
                             }
                             .onEnded {
                                 fingerDown = false
@@ -160,20 +169,22 @@ struct BreatheView: View {
             .clipped()
         }
         .background(.black)
-        .onAppear { ramp.prepare() }
+        .onAppear { feedback.prepare() }
         .accessibilityLabel("Breathe")
-    }
-
-    /// Damping 0 → finger and blob move 1:1; 100 → blob stays pinned.
-    /// Cosine ease gives a smooth curve with zero slope at both ends.
-    private var followFactor: Double {
-        0.5 * (1.0 + cos(.pi * damping / 100.0))
     }
 
     /// Retargets every continuous parameter at once. Tint, wobble, and size
     /// ease on the render clock; speed is integrated, so it bends smoothly
     /// by construction. One synchronous commit — the journeys retarget together.
-    private func goTo(speed: Double, displacement: Double, radius: CGFloat, excited: Bool, tempoDuration: Double, wobbleDuration: Double, sizeDuration: Double) {
+    private func goTo(
+        speed: Double,
+        displacement: Double,
+        radius: CGFloat,
+        excited: Bool,
+        tempoDuration: Double,
+        wobbleDuration: Double,
+        sizeDuration: Double
+    ) {
         speedDuration = tempoDuration
         displacementDuration = wobbleDuration
         radiusDuration = sizeDuration
@@ -192,12 +203,12 @@ struct BreatheView: View {
     /// pre-thump cancels revert nothing but the hum and the tension.
     private func startHold() {
         holdTask?.cancel()
-        thump.prepare()
+        feedback.arm()
         let forward = !isExcited
         // A touch tenses the blob whichever way the hold is headed — the haptic
         // is what says which one this is, not the size.
         withAnimation(pressSpring) { pressScale = Self.pressedSize }
-        ramp.start(direction: forward ? .enter : .exit)
+        feedback.ramp(direction: forward ? .enter : .exit)
         holdTask = Task {
             // The pattern runs the whole ramp itself; the task owns only the
             // silence after it, so the thump lands out of quiet. The remainder
@@ -206,17 +217,25 @@ struct BreatheView: View {
             // in, and reversing out is timed exactly like committing.
             try? await Task.sleep(for: .seconds(HoldRamp.rampDuration))
             if Task.isCancelled { return }
-            ramp.stop()
+            feedback.stopRamp()
             try? await Task.sleep(for: .seconds(max(0, Self.holdDuration - HoldRamp.rampDuration)))
             if Task.isCancelled { return }
-            thump.impactOccurred()
+            feedback.impact()
             // The thump lets go as well as puffing out, so the size it lands on
             // is the real one and not 80% of it. Both directions do this, which
             // is why it sits above the fork.
             withAnimation(pressSpring) { pressScale = 1 }
             if forward {
                 atB = false
-                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: UIConstants.Breathe.breatheExhaleSize, excited: true, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
+                goTo(
+                    speed: BreathStates.a.speed,
+                    displacement: BreathStates.a.displacement,
+                    radius: UIConstants.Breathe.breatheExhaleSize,
+                    excited: true,
+                    tempoDuration: Self.morphDuration,
+                    wobbleDuration: Self.morphDuration,
+                    sizeDuration: Self.morphDuration
+                )
                 // Excited owns the screen: ambient hides via focus, paging
                 // locks and other pages go hit-test/a11y-dark via isBreathing
                 // (offscreen pages are already stripped in PageView).
@@ -233,7 +252,15 @@ struct BreatheView: View {
                 // session's first word is a change and cascades in fresh.
                 Focus.hide(.prompt)
                 prompt = .resting
-                goTo(speed: BreathStates.neutral.speed, displacement: BreathStates.neutral.displacement, radius: UIConstants.Breathe.breatheRestingSize, excited: false, tempoDuration: Self.morphDuration, wobbleDuration: Self.morphDuration, sizeDuration: Self.morphDuration)
+                goTo(
+                    speed: BreathStates.neutral.speed,
+                    displacement: BreathStates.neutral.displacement,
+                    radius: UIConstants.Breathe.breatheRestingSize,
+                    excited: false,
+                    tempoDuration: Self.morphDuration,
+                    wobbleDuration: Self.morphDuration,
+                    sizeDuration: Self.morphDuration
+                )
                 breathing.isBreathing = false
                 Focus.visible(.ambient)
             }
@@ -246,7 +273,7 @@ struct BreatheView: View {
         holdTask = nil
         // Lifting early costs nothing but the tension: the hum stops where it
         // is, and the blob lets itself back out to the size it was.
-        ramp.stop()
+        feedback.stopRamp()
         withAnimation(pressSpring) { pressScale = 1 }
     }
 
@@ -269,7 +296,15 @@ struct BreatheView: View {
                 if coached == 0 { Focus.visible(.prompt) }
                 progressStart = .now
                 progressDuration = inhale
-                goTo(speed: BreathStates.b.speed, displacement: BreathStates.b.displacement, radius: UIConstants.Breathe.breatheInhaleSize, excited: true, tempoDuration: inhale, wobbleDuration: inhale, sizeDuration: inhale)
+                goTo(
+                    speed: BreathStates.b.speed,
+                    displacement: BreathStates.b.displacement,
+                    radius: UIConstants.Breathe.breatheInhaleSize,
+                    excited: true,
+                    tempoDuration: inhale,
+                    wobbleDuration: inhale,
+                    sizeDuration: inhale
+                )
                 try? await Task.sleep(for: .seconds(inhale))
                 if Task.isCancelled { return }
                 prompt = .hold
@@ -281,7 +316,15 @@ struct BreatheView: View {
                 prompt = .exhale
                 progressStart = .now
                 progressDuration = exhale
-                goTo(speed: BreathStates.a.speed, displacement: BreathStates.a.displacement, radius: UIConstants.Breathe.breatheExhaleSize, excited: true, tempoDuration: exhale, wobbleDuration: exhale, sizeDuration: exhale)
+                goTo(
+                    speed: BreathStates.a.speed,
+                    displacement: BreathStates.a.displacement,
+                    radius: UIConstants.Breathe.breatheExhaleSize,
+                    excited: true,
+                    tempoDuration: exhale,
+                    wobbleDuration: exhale,
+                    sizeDuration: exhale
+                )
                 try? await Task.sleep(for: .seconds(exhale))
                 if Task.isCancelled { return }
                 // Counted after the exhale, so the word stays up for the whole
@@ -295,29 +338,27 @@ struct BreatheView: View {
     }
 
     /// Release hands the flick velocity to the spring, projected onto the
-    /// return direction (fraction of remaining travel per second, clamped).
-    /// A near-still finger settles critically damped instead.
+    /// return direction (fraction of remaining travel per second). A
+    /// near-still finger hands over nothing and settles on the tap band.
     private func settleOffsetToZero(velocity: CGSize) {
         let distance = hypot(offset.width, offset.height)
         guard distance > 0.5 else {
-            withAnimation(releaseSpring(velocity: 0)) { offset = .zero }
+            withAnimation(release(0)) { offset = .zero }
             return
         }
         let projected = -(velocity.width * offset.width + velocity.height * offset.height)
             / (distance * distance)
-        let handoff = hypot(velocity.width, velocity.height) < 100
-            ? 0
-            : min(max(projected, -6), 6)
-        withAnimation(releaseSpring(velocity: handoff)) { offset = .zero }
+        // Under ~100pt/s the finger was not going anywhere, so there is no
+        // velocity worth handing over and the spring settles on the tap band.
+        // The clamp on the way in belongs to the shared spring.
+        let handoff = hypot(velocity.width, velocity.height) < 100 ? 0 : projected
+        withAnimation(release(handoff)) { offset = .zero }
     }
 
-    private func releaseSpring(velocity: Double) -> Animation {
-        UIConstants.Animation.motionGate(
-            velocity == 0
-                ? .spring(.snappy(duration: 0.35))
-                : .interpolatingSpring(duration: 0.38, bounce: 0.15, initialVelocity: velocity),
-            reduceMotion: reduceMotion
-        )
+    /// The release spring, shared with the collections wheel: one spring and one
+    /// velocity clamp, so a flick lands the same however it was thrown.
+    private func release(_ initialVelocity: Double) -> Animation {
+        UIConstants.Animation.releaseSpring(initialVelocity: initialVelocity, reduceMotion: reduceMotion)
     }
 }
 
