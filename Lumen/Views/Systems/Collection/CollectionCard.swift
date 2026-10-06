@@ -221,7 +221,7 @@ struct DiskView: View {
                 let step = norm(model.fingerAngle, current)
                 let dt = max(value.time.timeIntervalSince(model.fingerTime), 1e-3)
                 model.velocity += 0.35 * ((step / dt) - model.velocity)
-                model.rotation += step
+                model.rotation = model.normalized(model.rotation + step)
                 model.fingerAngle = current
                 model.fingerTime = value.time
                 model.ridge = Int(floor(-model.rotation / CollectionCatalog.spacing))
@@ -322,7 +322,7 @@ struct OrbitCard: View {
             .allowsHitTesting(!anyExpanded || isExpanded)
             .onTapGesture { onExpand(index) }
             .simultaneousGesture(
-                DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                DragGesture(minimumDistance: 12, coordinateSpace: .named("CollectionsView"))
                     .onChanged { onDragChange($0.translation) }
                     .onEnded { onDragEnd($0, geo) }
             )
