@@ -39,18 +39,23 @@ From Home, you move between pages by swiping in different directions. Home itsel
 Ambient system is an elegant and tiny ambiance player that is there when you need, and subtle when you don't. It is configured to contain Rain, Wind and Forest sounds, with a unique and innovative take on conventional players. When paused, the player is a tiny bubble that seems out of the way. When playing, its just visible enough to indicate the basics and still be undistracting. Hold and drag up on the player to select an ambiance source, hold and drag horizontally to manage volume, and let go to set that state. Tap on the player to play/pause.
 
 ## Collections System
+![Ambient](Lumen/.github/Collections.gif)
+
 Collections is a gorgeous turntable that rotates on drag, with cards above that rotate with the movement of the turntable. Rotate the turntable to focus on the desired collection, and click on the card to go fullscreen and browse and complete its respective tasks.
 
 ## Memory
 ![Memory](Lumen/.github/Memory.gif)
+
 Memory is a gorgeous log of every accomplishment you've made. Scroll through all the tasks you've accomplished, and when you accomplished them.
 
 ## Breathe
 ![Breathe](Lumen/.github/Breathe.gif)
+
 Breathe is a stunning mathematical blob that reacts to touch and helps calm you down. Long press to arm it and eliminate all other distractions, and follow along as it breathes with you, following a 4-7-8 breathing cycle until you hold down and disarm it.
 
 ## Rooms System
 ![Rooms](Lumen/.github/Rooms.gif)
+
 Room is a meticulously designed series of Bedroom, Living Room and Kitchen 3d rooms, each of which slowly fill with every task accomplished. Many models are made by app developer s4tturn, and outsourced models are credited in the app and at /Lumen/Views/Systems/Room/Credits/CREDITS.md.
 
 ## Keychain Storage System
@@ -58,6 +63,7 @@ To bypass the need for a paid developer account or signing in, Lumen uses keycha
 
 ## Debug Build
 ![Debug](Lumen/.github/Debug.gif)
+
 The Lumen app also has a debug variant that is built the same way, from the same source code, but with a different id, icon and seperated keychain so debugging doesn't affect release builds. Debug views include visual borders for touch targets and elements, and an fps counter.
 
 ## Made for Apple platforms
